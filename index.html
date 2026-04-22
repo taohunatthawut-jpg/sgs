@@ -1459,6 +1459,15 @@ function secScore(rec,sec,sjId){
     return rec.postCols.reduce((s,c,i)=>s+(parseFloat(rec.postScores[i])||0),0)/mx*W.post;
   }
   if(sec==='final'){
+    // แบบหลายช่อง (finalCols)
+    const fCols=(rec.finalCols&&rec.finalCols.length)?rec.finalCols:(W.finalCols||[]);
+    if(fCols.length){
+      const fSc=rec.finalScores||{};
+      const tot=fCols.reduce((s,_,i)=>s+(parseFloat(fSc[i])||0),0);
+      const mx=fCols.reduce((s,c)=>s+(c.m||0),0)||1;
+      return tot/mx*W.final;
+    }
+    // แบบช่องเดียว
     const mx=W.finalMax||100;
     return (parseFloat(rec.final)||0)/mx*W.final;
   }
