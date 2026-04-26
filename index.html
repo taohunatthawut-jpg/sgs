@@ -345,8 +345,13 @@ label.rm-chk-item:has(input:checked){background:#e3f2fd;border-color:#90caf9;col
     try{
       const o=JSON.parse(val.payload);
       if(o.D){window.D=o.D;if(typeof D!=='undefined')Object.assign(D,o.D);}
-      if(o.CY){window.CY=o.CY;if(typeof CY!=='undefined')CY=o.CY;}
-      if(o.CT){window.CT=o.CT;if(typeof CT!=='undefined')CT=o.CT;}
+      // ไม่ override CY/CT ถ้าผู้ใช้เพิ่งเปลี่ยนเอง (ใช้ค่าปัจจุบันใน dropdown แทน)
+      const curYear=document.getElementById('ctx-year')?.value;
+      const curTerm=document.getElementById('ctx-term')?.value;
+      if(curYear)CY=curYear,window.CY=curYear;
+      else if(o.CY){window.CY=o.CY;if(typeof CY!=='undefined')CY=o.CY;}
+      if(curTerm)CT=curTerm,window.CT=curTerm;
+      else if(o.CT){window.CT=o.CT;if(typeof CT!=='undefined')CT=o.CT;}
       if(typeof window.popAll==='function')window.popAll();
       if(typeof window.rDash==='function')window.rDash();
       console.log('SGS: sync real-time จาก Firebase แล้ว (by '+val._by+')');
@@ -1459,15 +1464,12 @@ function secScore(rec,sec,sjId){
     return rec.postCols.reduce((s,c,i)=>s+(parseFloat(rec.postScores[i])||0),0)/mx*W.post;
   }
   if(sec==='final'){
-    // แบบหลายช่อง (finalCols)
-    const fCols=(rec.finalCols&&rec.finalCols.length)?rec.finalCols:(W.finalCols||[]);
-    if(fCols.length){
-      const fSc=rec.finalScores||{};
-      const tot=fCols.reduce((s,_,i)=>s+(parseFloat(fSc[i])||0),0);
-      const mx=fCols.reduce((s,c)=>s+(c.m||0),0)||1;
-      return tot/mx*W.final;
+    // ถ้ามีช่องย่อย ให้ใช้ผลรวมคะแนนเต็มของช่องย่อยเป็นตัวหาร (เหมือน mid)
+    const hasFinalCols=W.finalCols&&W.finalCols.length>0;
+    if(hasFinalCols){
+      const mx=W.finalCols.reduce((s,c)=>s+(c.m||0),0)||1;
+      return (parseFloat(rec.final)||0)/mx*W.final;
     }
-    // แบบช่องเดียว
     const mx=W.finalMax||100;
     return (parseFloat(rec.final)||0)/mx*W.final;
   }
@@ -1629,8 +1631,8 @@ document.getElementById('sb').addEventListener('click',e=>{
   popAll();
   ({dash:rDash,students:()=>rStu(1),grades:rGr,gpa:()=>rGPA(1),subjects:rSj,classes:rCls,settings:rSettings,report:rRpt,pp6:rPP6,roster:rRoster,remedial:rRemedial,history:rHistory,users:rUsers,timetable:rTimetable})[p]?.();
 });
-document.getElementById('ctx-year').onchange=e=>{CY=e.target.value;popAll();rDash();};
-document.getElementById('ctx-term').onchange=e=>{CT=e.target.value;popAll();rDash();};
+document.getElementById('ctx-year').onchange=e=>{CY=e.target.value;window.CY=CY;saveAll();popAll();rDash();};
+document.getElementById('ctx-term').onchange=e=>{CT=e.target.value;window.CT=CT;saveAll();popAll();rDash();};
 
 // ── DASHBOARD ────────────────────────────────────────────────────────────────
 window.rDash=function rDash(){
@@ -5725,8 +5727,8 @@ document.getElementById('mn').addEventListener('change',e=>{
   if(e.target.id==='ns-lv')fillSel('ns-rm',getRooms(document.getElementById('ns-lv').value));
   if(e.target.id==='rl'){syncRm('rr','rl','เลือกห้อง');}
   if(e.target.id==='pp6-lv')syncRm('pp6-rm','pp6-lv','เลือกห้อง');
-  if(e.target.id==='ctx-year'){CY=e.target.value;popAll();rDash();}
-  if(e.target.id==='ctx-term'){CT=e.target.value;popAll();rDash();}
+  if(e.target.id==='ctx-year'){CY=e.target.value;window.CY=CY;saveAll();popAll();rDash();}
+  if(e.target.id==='ctx-term'){CT=e.target.value;window.CT=CT;saveAll();popAll();rDash();}
 });
 
 document.getElementById('mn').addEventListener('click',e=>{
