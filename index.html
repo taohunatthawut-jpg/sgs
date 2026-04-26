@@ -365,6 +365,12 @@ label.rm-chk-item:has(input:checked){background:#e3f2fd;border-color:#90caf9;col
       try{
         const o=JSON.parse(payload);
         if(o.D){window.D=o.D;}
+        // ใช้ค่า CY/CT จาก localStorage ก่อน (อาจถูกเปลี่ยนระหว่างโหลด)
+        // ถ้า localStorage มีค่าใหม่กว่า Firebase ให้เอา localStorage แทน
+        try{
+          const lsRaw=localStorage.getItem('sgs-v2-data');
+          if(lsRaw){const lsO=JSON.parse(lsRaw);if(lsO.CY)o.CY=lsO.CY;if(lsO.CT)o.CT=lsO.CT;}
+        }catch(e2){}
         if(o.CY)window.CY=o.CY;
         if(o.CT)window.CT=o.CT;
       }catch(e){console.warn('Firebase init parse error:',e);}
@@ -888,6 +894,8 @@ label.rm-chk-item:has(input:checked){background:#e3f2fd;border-color:#90caf9;col
     <div class="pt">📅 ตารางเรียน / ตารางสอน</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button id="btn-tt-auto" style="background:#7c3aed;color:#fff;border-color:#7c3aed;font-weight:600">⚡ สร้างตารางอัตโนมัติ</button>
+      <button id="btn-tt-save-snap" style="background:#1e7e34;color:#fff;border-color:#1e7e34;font-weight:600">💾 บันทึกตารางภาคนี้</button>
+      <button id="btn-tt-load-snap" style="background:#0f766e;color:#fff;border-color:#0f766e;font-weight:600">📂 โหลดตารางภาคอื่น</button>
       <button id="btn-tt-ps" class="bp">🖨 พิมพ์ตารางเรียน</button>
       <button id="btn-tt-pt" class="bg2">🖨 พิมพ์ตารางสอน</button>
       <button id="btn-tt-pg" style="background:#b45309;color:#fff;border-color:#b45309;font-weight:600">🖨 พิมพ์แยกกลุ่มสาระ</button>
@@ -5644,8 +5652,15 @@ function showPromoteModal(){
 
 // ── SAVE / LOAD ───────────────────────────────────────────────────────────────
 function saveAll(){
-  // ห้าม save ขณะที่ Firebase กำลังโหลดข้อมูลครั้งแรก
-  if(window._fbLoading){console.warn('SGS: saveAll blocked — Firebase ยังโหลดอยู่');return;}
+  // ห้าม save ขณะที่ Firebase กำลังโหลดข้อมูลครั้งแรก (แต่ยังบันทึก localStorage ได้)
+  if(window._fbLoading){
+    // อย่างน้อยบันทึก CY/CT ลง localStorage ไว้ก่อน เพื่อไม่ให้หาย
+    try{
+      const r=localStorage.getItem('sgs-v2-data');
+      if(r){const o=JSON.parse(r);o.CY=CY;o.CT=CT;localStorage.setItem('sgs-v2-data',JSON.stringify(o));}
+    }catch(e){}
+    console.warn('SGS: saveAll blocked — Firebase ยังโหลดอยู่');return;
+  }
   try{
     D._savedAt=Date.now();
     if(!D.users)D.users={};
@@ -6308,10 +6323,18 @@ const _DEF_PERIODS=[
 ];
 
 function getTT(){
-  if(!D.timetable)D.timetable={periods:[..._DEF_PERIODS.map(p=>({...p}))],slots:[]};
-  if(!D.timetable.periods)D.timetable.periods=[..._DEF_PERIODS.map(p=>({...p}))];
-  if(!D.timetable.slots)D.timetable.slots=[];
-  return D.timetable;
+  if(!D.timetables)D.timetables={};
+  if(!D.timetables[CY])D.timetables[CY]={};
+  if(!D.timetables[CY][CT])D.timetables[CY][CT]={periods:[..._DEF_PERIODS.map(p=>({...p}))],slots:[]};
+  const tt=D.timetables[CY][CT];
+  if(!tt.periods)tt.periods=[..._DEF_PERIODS.map(p=>({...p}))];
+  if(!tt.slots)tt.slots=[];
+  // migrate D.timetable เดิม (ถ้ามี) เข้า timetables ครั้งแรก
+  if(D.timetable&&D.timetable.slots&&D.timetable.slots.length&&!tt._migrated){
+    if(!tt.slots.length){tt.slots=D.timetable.slots;tt.periods=D.timetable.periods||tt.periods;}
+    tt._migrated=true;
+  }
+  return tt;
 }
 
 let _ttMode='student';
@@ -6324,14 +6347,20 @@ function rTimetable(){
   // ครู: ถ้าเป็นครู → ซ่อน tab แก้ไข + ปุ่มสร้างอัตโนมัติ
   const tabEdit=document.querySelector('#tt-tabbar [data-tt="edit"]');
   const btnAuto2=document.getElementById('btn-tt-auto');
+  const btnSaveSnap=document.getElementById('btn-tt-save-snap');
+  const btnLoadSnap=document.getElementById('btn-tt-load-snap');
   if(!isAdmin){
     if(tabEdit)tabEdit.style.display='none';
     if(btnAuto2)btnAuto2.style.display='none';
+    if(btnSaveSnap)btnSaveSnap.style.display='none';
+    if(btnLoadSnap)btnLoadSnap.style.display='none';
     // ถ้า tab ปัจจุบันเป็น edit → reset เป็น student
     if(_ttMode==='edit'){_ttMode='student';document.querySelectorAll('#tt-tabbar .stab').forEach(x=>x.classList.toggle('on',x.dataset.tt==='student'));}
   } else {
     if(tabEdit)tabEdit.style.display='';
     if(btnAuto2)btnAuto2.style.display='';
+    if(btnSaveSnap)btnSaveSnap.style.display='';
+    if(btnLoadSnap)btnLoadSnap.style.display='';
   }
   // ครู
   const tsel=document.getElementById('tt-tch');
@@ -6535,6 +6564,60 @@ function rTimetable(){
   document.getElementById('btn-tt-clr').onclick=function(){
     if(!confirm('ล้างตารางเรียนทั้งหมด?'))return;
     getTT().slots=[];saveAll();document.getElementById('tt-area').innerHTML='';
+  };
+  // บันทึกตารางภาคนี้ (แสดงสรุป)
+  document.getElementById('btn-tt-save-snap').onclick=function(){
+    const tt=getTT();
+    saveAll();
+    alert('✅ บันทึกตารางเรียน ปีการศึกษา '+CY+' ภาคเรียนที่ '+CT+' สำเร็จ\n📌 '+tt.slots.length+' คาบ บันทึกไว้แล้ว');
+  };
+  // โหลดตารางจากภาคอื่น
+  document.getElementById('btn-tt-load-snap').onclick=function(){
+    if(!D.timetables)D.timetables={};
+    const allKeys=[];
+    Object.keys(D.timetables).forEach(y=>{Object.keys(D.timetables[y]).forEach(t=>{
+      const slots=(D.timetables[y][t]?.slots||[]).length;
+      if(!(y===CY&&t===CT))allKeys.push({y,t,slots});
+    });});
+    if(!allKeys.length){alert('ไม่มีตารางจากภาคอื่นที่บันทึกไว้');return;}
+    // สร้าง modal เลือก
+    let modal=document.getElementById('tt-snap-modal');
+    if(!modal){modal=document.createElement('div');modal.id='tt-snap-modal';modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center';document.body.appendChild(modal);}
+    modal.innerHTML=`<div style="background:#fff;border-radius:16px;padding:0;width:420px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.4);overflow:hidden">
+      <div style="background:#1a2744;color:#fff;padding:16px 20px">
+        <div style="font-size:15px;font-weight:700">📂 โหลดตารางจากภาคอื่น</div>
+        <div style="font-size:11px;opacity:.7;margin-top:2px">จะทับตารางปัจจุบัน (${CY}/ภาค${CT})</div>
+      </div>
+      <div style="padding:16px;display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow-y:auto">
+        ${allKeys.map(k=>`<button class="tt-snap-pick" data-y="${k.y}" data-t="${k.t}" style="padding:12px 14px;border:2px solid #e0e4ec;border-radius:10px;background:#f8fafc;cursor:pointer;text-align:left;font-family:Sarabun,sans-serif;font-size:13px">
+          <strong>ปีการศึกษา ${k.y} ภาคเรียนที่ ${k.t}</strong>
+          <span style="font-size:11px;color:#888;margin-left:8px">${k.slots} คาบ</span>
+        </button>`).join('')}
+      </div>
+      <div style="padding:12px 16px;border-top:1px solid #eee;display:flex;justify-content:flex-end">
+        <button id="tt-snap-modal-close" style="padding:7px 16px;border:1px solid #dde;border-radius:8px;background:#fff;cursor:pointer;font-family:Sarabun,sans-serif">ยกเลิก</button>
+      </div>
+    </div>`;
+    modal.style.display='flex';
+    document.getElementById('tt-snap-modal-close').onclick=()=>{modal.style.display='none';};
+    modal.querySelectorAll('.tt-snap-pick').forEach(btn=>{
+      btn.onclick=function(){
+        const srcY=this.dataset.y,srcT=this.dataset.t;
+        if(!confirm('โหลดตารางจากปี '+srcY+' ภาค '+srcT+' มาแทนที่ภาค '+CT+'?'))return;
+        const src=D.timetables[srcY][srcT];
+        if(!D.timetables[CY])D.timetables[CY]={};
+        // deep copy slots และ periods
+        D.timetables[CY][CT]={
+          periods:JSON.parse(JSON.stringify(src.periods||[])),
+          slots:JSON.parse(JSON.stringify(src.slots||[]))
+        };
+        saveAll();
+        modal.style.display='none';
+        document.getElementById('tt-area').innerHTML='';
+        alert('✅ โหลดตารางจากปี '+srcY+' ภาค '+srcT+' มาแล้ว\n📌 '+D.timetables[CY][CT].slots.length+' คาบ');
+        rTimetable();
+      };
+    });
   };
   // add period
   document.getElementById('btn-tt-addp').onclick=function(){
