@@ -344,7 +344,7 @@ label.rm-chk-item:has(input:checked){background:#e3f2fd;border-color:#90caf9;col
     if(!_fbInitDone)return;
     try{
       const o=JSON.parse(val.payload);
-      if(o.D){window.D=o.D;if(typeof D!=='undefined')Object.assign(D,o.D);}
+      if(o.D){window.D=o.D;if(typeof D!=='undefined')Object.assign(D,o.D);patchD();}
       // ไม่ override CY/CT ถ้าผู้ใช้เพิ่งเปลี่ยนเอง (ใช้ค่าปัจจุบันใน dropdown แทน)
       const curYear=document.getElementById('ctx-year')?.value;
       const curTerm=document.getElementById('ctx-term')?.value;
@@ -364,7 +364,7 @@ label.rm-chk-item:has(input:checked){background:#e3f2fd;border-color:#90caf9;col
     if(payload){
       try{
         const o=JSON.parse(payload);
-        if(o.D){window.D=o.D;}
+        if(o.D){window.D=o.D;if(typeof D!=='undefined')Object.assign(D,o.D);patchD();}
         // ใช้ค่า CY/CT จาก localStorage ก่อน (อาจถูกเปลี่ยนระหว่างโหลด)
         // ถ้า localStorage มีค่าใหม่กว่า Firebase ให้เอา localStorage แทน
         try{
@@ -602,6 +602,7 @@ label.rm-chk-item:has(input:checked){background:#e3f2fd;border-color:#90caf9;col
       <button id="btn-draw-advisors" style="background:#7c3aed;color:#fff;border-color:#7c3aed;font-size:13px;padding:7px 14px;border-radius:8px;cursor:pointer;font-weight:600">🎲 สุ่มครูที่ปรึกษา</button>
       <button id="btn-draw-advisors-from-sj" style="background:#0891b2;color:#fff;border-color:#0891b2;font-size:13px;padding:7px 14px;border-radius:8px;cursor:pointer;font-weight:600">📚 สุ่มจากห้องที่สอน</button>
       <button id="btn-clear-advisors" style="background:#c0392b;color:#fff;border-color:#c0392b;font-size:13px;padding:7px 14px;border-radius:8px;cursor:pointer">🗑 ล้างครูที่ปรึกษาทั้งหมด</button>
+      <button id="btn-import-advisors" style="background:#1e7e34;color:#fff;border-color:#1e7e34;font-size:13px;padding:7px 14px;border-radius:8px;cursor:pointer;font-weight:600">📂 นำเข้าจากปี/ภาคอื่น</button>
       <span id="draw-advisor-msg" style="font-size:12px;color:#1a1a1a"></span>
     </div>
   </div>
@@ -646,6 +647,7 @@ label.rm-chk-item:has(input:checked){background:#e3f2fd;border-color:#90caf9;col
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
         <div style="font-size:12px;font-weight:600;color:#555">หัวหน้ากลุ่มสาระการเรียนรู้</div>
         <button id="btn-draw-dept-heads" style="font-size:12px;padding:3px 12px;background:#ede7f6;border:1px solid #ce93d8;color:#6a1b9a;border-radius:8px;cursor:pointer;font-weight:600">🎲 สุ่มหัวหน้ากลุ่มสาระ</button>
+        <button id="btn-import-dept-heads" style="font-size:12px;padding:3px 12px;background:#1e7e34;color:#fff;border:1px solid #1e7e34;border-radius:8px;cursor:pointer;font-weight:600">📂 นำเข้าจากปี/ภาคอื่น</button>
         <span id="draw-msg" style="font-size:11px;color:#888"></span>
       </div>
       <div style="font-size:11px;color:#888;margin-bottom:8px">💡 หัวหน้าที่สุ่มได้จะมาจากครูที่ระบุกลุ่มสาระไว้ในหน้าจัดการผู้ใช้ และจะไม่ทับข้อมูลที่กรอกเองไว้แล้ว</div>
@@ -1356,7 +1358,11 @@ function mkBase(){
       students.push({id:String(67000+seq).padStart(5,'0'),name,level:lv,room:String(r)});seq++;
     });
   }});
-  return{school:'โรงเรียน',years:['2568'],classes,students,teachers:[],
+  return{school:'โรงเรียน',years:['2568'],
+    _classes:{'2568':classes},
+    _students:{'2568':students},
+    _deptHeads:{},
+    teachers:[],
     subjectMap:{'2568':{'1':[],'2':[]}},grades:{},
     weights:{...DEF_W},
     gradeThresholds:[
@@ -1380,6 +1386,111 @@ function mkBase(){
 }
 
 window.D=window.D||mkBase();let D=window.D,CY='2568',CT='1';
+
+// ── Year-aware D.students and D.classes via getter/setter ──────────────────
+// แทนที่จะแก้ทุก reference ของ D.students/D.classes
+// ใช้ getter/setter บน D เพื่อ redirect ไป D._students[CY] และ D._classes[CY] อัตโนมัติ
+function patchD(){
+  // ย้ายข้อมูลเดิมเข้า _students/_classes ถ้ายังไม่ได้ย้าย
+  if(!D._students){
+    D._students={};
+    if(Array.isArray(D.students)&&D.students.length){
+      D._students[CY]=D.students;
+    }
+    delete D.students;
+  }
+  if(!D._classes){
+    D._classes={};
+    if(Array.isArray(D.classes)&&D.classes.length){
+      D._classes[CY]=D.classes;
+    }
+    delete D.classes;
+  }
+  if(!D._deptHeads){
+    D._deptHeads={};
+    if(D.deptHeads&&Object.keys(D.deptHeads).length){
+      D._deptHeads[CY]={};
+      D._deptHeads[CY]['1']=D.deptHeads;
+      D._deptHeads[CY]['2']=D.deptHeads;
+    }
+    delete D.deptHeads;
+  }
+
+  // Define getter/setter for D.students (year-based)
+  if(!Object.getOwnPropertyDescriptor(D,'students')?.get){
+    Object.defineProperty(D,'students',{
+      get(){
+        if(!this._students)this._students={};
+        if(!this._students[CY])this._students[CY]=_genStudents();
+        return this._students[CY];
+      },
+      set(v){
+        if(!this._students)this._students={};
+        this._students[CY]=v;
+      },
+      configurable:true,enumerable:true
+    });
+  }
+
+  // Define getter/setter for D.classes (year-based, shared structure but advisors per year)
+  // ห้องเรียนใช้ร่วมกัน แต่ครูที่ปรึกษา (teachers[]) แยกตามปี
+  if(!Object.getOwnPropertyDescriptor(D,'classes')?.get){
+    Object.defineProperty(D,'classes',{
+      get(){
+        if(!this._classes)this._classes={};
+        if(!this._classes[CY]){
+          // copy structure from any existing year, clear teachers
+          const baseYear=Object.keys(this._classes)[0];
+          if(baseYear){
+            this._classes[CY]=JSON.parse(JSON.stringify(this._classes[baseYear])).map(c=>({...c,teachers:[]}));
+          } else {
+            // สร้างจาก LV default
+            const cls=[];
+            LV.forEach(lv=>{for(let r=1;r<=12;r++)cls.push({level:lv,room:String(r),teachers:[]});});
+            this._classes[CY]=cls;
+          }
+        }
+        return this._classes[CY];
+      },
+      set(v){
+        if(!this._classes)this._classes={};
+        this._classes[CY]=v;
+      },
+      configurable:true,enumerable:true
+    });
+  }
+
+  // Define getter/setter for D.deptHeads (year+term based)
+  if(!Object.getOwnPropertyDescriptor(D,'deptHeads')?.get){
+    Object.defineProperty(D,'deptHeads',{
+      get(){
+        if(!this._deptHeads)this._deptHeads={};
+        if(!this._deptHeads[CY])this._deptHeads[CY]={};
+        if(!this._deptHeads[CY][CT])this._deptHeads[CY][CT]={};
+        return this._deptHeads[CY][CT];
+      },
+      set(v){
+        if(!this._deptHeads)this._deptHeads={};
+        if(!this._deptHeads[CY])this._deptHeads[CY]={};
+        this._deptHeads[CY][CT]=v;
+      },
+      configurable:true,enumerable:true
+    });
+  }
+}
+
+function _genStudents(){
+  const students=[];let seq=1;
+  LV.forEach(lv=>{
+    const rooms=D._classes?.[CY]?.filter(c=>c.level===lv).map(c=>c.room)||[];
+    (rooms.length?rooms:[...Array(12)].map((_,i)=>String(i+1))).forEach(r=>{
+      genRoomNames(30+Math.floor(Math.random()*11)).forEach(name=>{
+        students.push({id:String(67000+seq).padStart(5,'0'),name,level:lv,room:r});seq++;
+      });
+    });
+  });
+  return students;
+}
 
 // ── Core helpers ─────────────────────────────────────────────────────────────
 function getSjs(){
@@ -1586,6 +1697,7 @@ function syncRm(rmId,lvId,blank){
   fillSel(rmId,lv?getRooms(lv):LV.flatMap(l=>getRooms(l)),blank);
 }
 window.popAll=function popAll(){
+  patchD(); // ensure D.students/D.classes/D.deptHeads point to correct year
   const alvs=LV.filter(l=>D.classes.some(c=>c.level===l));
   ['sl','gpal','rl'].forEach(id=>fillSel(id,alvs,'ทุกระดับ'));
   fillSel('ns-lv',alvs);fillSel('pp6-lv',alvs,'เลือกระดับ');
@@ -3493,6 +3605,70 @@ function renderGrBodyCols(sjId,stus,sec,cols,scKey){
 }
 
 // ── SETTINGS ─────────────────────────────────────────────────────────────────
+// ── ฟังก์ชัน modal นำเข้าข้อมูลจากปี/ภาคอื่น ──────────────────────────────
+function _showImportModal(type){
+  // รวบรวม source options จากข้อมูลที่มี
+  const options=[];
+  const years=Object.keys(D._students||{}).concat(Object.keys(D._classes||{})).concat(Object.keys(D._deptHeads||{}));
+  const uniqYears=[...new Set(years)].sort();
+  uniqYears.forEach(y=>{
+    ['1','2'].forEach(t=>{
+      if(y===CY&&t===CT)return; // ข้ามปัจจุบัน
+      let hasData=false;
+      if(type==='advisors'){
+        hasData=D._classes?.[y]?.some(c=>(c.teachers||[]).length>0);
+      } else if(type==='deptHeads'){
+        hasData=D._deptHeads?.[y]?.[t]&&Object.keys(D._deptHeads[y][t]).length>0;
+      } else if(type==='teachingRoom'){
+        hasData=true;
+      }
+      if(hasData||type==='teachingRoom')options.push({y,t});
+    });
+  });
+  if(!options.length){alert('ไม่มีข้อมูลจากปี/ภาคอื่นที่บันทึกไว้');return;}
+  let modal=document.getElementById('import-snap-modal');
+  if(!modal){modal=document.createElement('div');modal.id='import-snap-modal';modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center';document.body.appendChild(modal);}
+  const typeLabel={'advisors':'ครูที่ปรึกษา','deptHeads':'หัวหน้ากลุ่มสาระ','teachingRoom':'ห้องสอนของครู'}[type]||type;
+  modal.innerHTML='<div style="background:#fff;border-radius:16px;padding:0;width:380px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.4);overflow:hidden">'
+    +'<div style="background:#1a2744;color:#fff;padding:16px 20px"><div style="font-size:15px;font-weight:700">📂 นำเข้า'+typeLabel+'</div>'
+    +'<div style="font-size:11px;opacity:.7;margin-top:2px">เลือกปี/ภาคที่ต้องการดึงข้อมูลจาก</div></div>'
+    +'<div style="padding:16px;display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow-y:auto">'
+    +options.map(o=>'<button class="import-snap-pick" data-y="'+o.y+'" data-t="'+o.t+'" style="padding:12px 14px;border:2px solid #e0e4ec;border-radius:10px;background:#f8fafc;cursor:pointer;text-align:left;font-family:Sarabun,sans-serif;font-size:13px;font-weight:600">ปีการศึกษา '+o.y+' ภาคเรียนที่ '+o.t+'</button>').join('')
+    +'</div><div style="padding:12px 16px;border-top:1px solid #eee;display:flex;justify-content:flex-end">'
+    +'<button id="import-snap-close" style="padding:7px 16px;border:1px solid #dde;border-radius:8px;background:#fff;cursor:pointer;font-family:Sarabun,sans-serif">ยกเลิก</button></div></div>';
+  modal.style.display='flex';
+  document.getElementById('import-snap-close').onclick=()=>{modal.style.display='none';};
+  modal.querySelectorAll('.import-snap-pick').forEach(btn=>{
+    btn.onclick=function(){
+      const srcY=this.dataset.y,srcT=this.dataset.t;
+      if(type==='advisors'){
+        const srcClasses=D._classes?.[srcY];
+        if(!srcClasses){alert('ไม่พบข้อมูลห้องเรียนในปีที่เลือก');return;}
+        if(!confirm('นำเข้าครูที่ปรึกษาจากปี '+srcY+' ภาค '+srcT+' มาแทนที่ปัจจุบัน?'))return;
+        D.classes.forEach(c=>{
+          const src=srcClasses.find(x=>x.level===c.level&&x.room===c.room);
+          c.teachers=src?[...(src.teachers||[])]:[];
+        });
+        saveAll();modal.style.display='none';rCls();
+        alert('นำเข้าครูที่ปรึกษาจากปี '+srcY+' ภาค '+srcT+' แล้ว ✓');
+      } else if(type==='deptHeads'){
+        const srcHeads=D._deptHeads?.[srcY]?.[srcT];
+        if(!srcHeads||!Object.keys(srcHeads).length){alert('ไม่พบข้อมูลหัวหน้ากลุ่มสาระในปี/ภาคที่เลือก');return;}
+        if(!confirm('นำเข้าหัวหน้ากลุ่มสาระจากปี '+srcY+' ภาค '+srcT+'?'))return;
+        if(!D._deptHeads)D._deptHeads={};
+        if(!D._deptHeads[CY])D._deptHeads[CY]={};
+        D._deptHeads[CY][CT]=JSON.parse(JSON.stringify(srcHeads));
+        saveAll();modal.style.display='none';rSettings();
+        alert('นำเข้าหัวหน้ากลุ่มสาระจากปี '+srcY+' ภาค '+srcT+' แล้ว ✓');
+      } else if(type==='teachingRoom'){
+        // ห้องสอนเก็บใน D.users[].teachingRoom — copy ข้ามปีได้เลย (ใช้ร่วมกัน)
+        alert('ห้องสอนของครูใช้ร่วมกันทุกปี/ภาคอยู่แล้ว ไม่ต้องนำเข้า');
+        modal.style.display='none';
+      }
+    };
+  });
+}
+
 function rSettings(){
   // show/hide settings cards ตาม role
   const isAdm=_isAdmin();
@@ -5565,27 +5741,44 @@ function _promoteLevel(fromLv, toLv){
 }
 
 function doPromoteAll(){
-  // เลื่อนชั้นทั้งโรงเรียน: ม.1→ม.2, ม.2→ม.3, ... ม.5→ม.6 (ม.6 ต้องลบแยก)
+  // เลื่อนชั้นทั้งโรงเรียน: สร้างข้อมูลปีใหม่
+  const nextYearStr=prompt('ปีการศึกษาที่จะเลื่อนชั้นไป (เช่น 2569)',String(parseInt(CY)+1));
+  if(!nextYearStr||!nextYearStr.trim())return;
+  const nextYear=nextYearStr.trim();
+  if(nextYear===CY){alert('ปีใหม่ต้องต่างจากปีปัจจุบัน');return;}
   const lvMap={'ม.1':'ม.2','ม.2':'ม.3','ม.3':'ม.4','ม.4':'ม.5','ม.5':'ม.6'};
   const counts={};
-  Object.keys(lvMap).forEach(lv=>{
-    counts[lv]=D.students.filter(s=>s.level===lv).length;
-  });
+  Object.keys(lvMap).forEach(lv=>{counts[lv]=D.students.filter(s=>s.level===lv).length;});
   const m6=D.students.filter(s=>s.level==='ม.6').length;
-  const summary=Object.entries(lvMap).map(([f,t])=>`${f}→${t}: ${counts[f]} คน`).join('\n');
-  if(!confirm('เลื่อนชั้นทุกระดับ:\n'+summary+(m6?'\n\n⚠️ ม.6 ('+m6+' คน) จะยังอยู่ในระบบ ต้องลบเองหลังเลื่อนชั้น':'')+'\n\nดำเนินการต่อ?'))return;
-  // ต้องเลื่อนจากสูงไปต่ำเพื่อไม่ให้ชน
+  const summary=Object.entries(lvMap).map(([f,t])=>f+'→'+t+': '+counts[f]+' คน').join('\n');
+  if(!confirm('เลื่อนชั้น ปี '+CY+' → '+nextYear+':\n'+summary+'\n\n✅ ม.1 ใหม่จะถูกสร้างอัตโนมัติ\n🗑 ม.6 ('+m6+' คน) จะถูกลบออก\n\nดำเนินการต่อ?'))return;
+  if(!D._students)D._students={};
+  if(!D._classes)D._classes={};
+  // copy นักเรียน ม.1-ม.5 เลื่อนชั้น (ม.6 หาย)
+  const promoted=[];
   ['ม.5','ม.4','ม.3','ม.2','ม.1'].forEach(lv=>{
     const toLv=lvMap[lv];
-    // สร้างห้องปลายทางถ้ายังไม่มี
-    D.classes.filter(c=>c.level===lv).forEach(c=>{
-      if(!D.classes.some(x=>x.level===toLv&&x.room===c.room))
-        D.classes.push({level:toLv,room:c.room,teachers:[]});
-    });
-    D.students.forEach(s=>{if(s.level===lv)s.level=toLv;});
+    D._students[CY].filter(s=>s.level===lv).forEach(s=>{promoted.push({...s,level:toLv});});
   });
-  saveAll();popAll();rStu(1);
-  alert('เลื่อนชั้นเรียบร้อย ✓\nหมายเหตุ: ม.6 เดิมยังอยู่ในระบบ กรุณาลบทีหลัง');
+  // สร้างนักเรียน ม.1 ใหม่
+  const rooms1=D.classes.filter(c=>c.level==='ม.1').map(c=>c.room);
+  let seq2=Date.now()%100000;
+  const newM1=[];
+  (rooms1.length?rooms1:[...Array(12)].map((_,i)=>String(i+1))).forEach(r=>{
+    genRoomNames(30+Math.floor(Math.random()*11)).forEach(name=>{
+      newM1.push({id:'N'+String(seq2++).padStart(5,'0'),name,level:'ม.1',room:r});
+    });
+  });
+  D._students[nextYear]=[...promoted,...newM1];
+  // copy โครงสร้างห้อง ล้างครูที่ปรึกษา
+  D._classes[nextYear]=JSON.parse(JSON.stringify(D.classes)).map(c=>({...c,teachers:[]}));
+  if(!D.years)D.years=[];
+  if(!D.years.includes(nextYear))D.years.push(nextYear);
+  D.years.sort();
+  saveAll();
+  CY=nextYear;CT='1';window.CY=CY;window.CT=CT;
+  patchD();popAll();rStu(1);
+  alert('เลื่อนชั้นเรียบร้อย ✓\nปี '+nextYear+' ภาค 1\nนักเรียน ม.1 ใหม่ '+newM1.length+' คน\nนักเรียนเลื่อนชั้น '+promoted.length+' คน');
 }
 
 function doDeleteLevel(lv){
@@ -5664,8 +5857,18 @@ function saveAll(){
   try{
     D._savedAt=Date.now();
     if(!D.users)D.users={};
-    // บันทึกข้อมูลทั้งหมดรวม users
-    const dataAll=JSON.stringify({D,CY,CT});
+    // สร้าง snapshot ที่รวม _students/_classes/_deptHeads (getter ไม่ serialize อัตโนมัติ)
+    const _Dsnap={};
+    Object.keys(D).forEach(k=>{try{_Dsnap[k]=D[k];}catch(e){}});
+    // บังคับใส่ _students/_classes/_deptHeads
+    _Dsnap._students=D._students||{};
+    _Dsnap._classes=D._classes||{};
+    _Dsnap._deptHeads=D._deptHeads||{};
+    // ลบ getter properties ออก (จะ restore ผ่าน patchD() ตอน load)
+    delete _Dsnap.students;
+    delete _Dsnap.classes;
+    delete _Dsnap.deptHeads;
+    const dataAll=JSON.stringify({D:_Dsnap,CY,CT});
     const usersData=JSON.stringify({users:D.users,_at:D._savedAt});
     try{
       localStorage.setItem(SK,dataAll);
@@ -5693,6 +5896,7 @@ function loadSaved(){
       if(o.CT)CT=o.CT;
     }
   }catch(e){console.warn('SGS loadSaved:',e);}
+  patchD(); // ติดตั้ง getter/setter หลังโหลดข้อมูล
   // โหลด users แยก - merge เข้า D.users
   try{
     const ru=localStorage.getItem(USK);
@@ -5818,6 +6022,10 @@ document.getElementById('mn').addEventListener('click',e=>{
     D.classes.forEach(c=>{c.teachers=[];});
     saveAll();rCls();return;
   }
+  if(e.target.id==='btn-import-advisors'){
+    if(!_isAdmin()){alert('เฉพาะ Admin เท่านั้น');return;}
+    _showImportModal('advisors');return;
+  }
   if(e.target.id==='btn-add-cls'){
     const level=document.getElementById('cl-lv').value,room=document.getElementById('cl-rm').value;
     if(!level||!room)return;if(D.classes.find(c=>c.level===level&&c.room===room)){alert('มีห้องนี้แล้ว');return;}
@@ -5898,6 +6106,10 @@ document.getElementById('mn').addEventListener('click',e=>{
     // apply ทันที
     _applyYearTermLock();
     return;
+  }
+  if(e.target.id==='btn-import-dept-heads'){
+    if(!_isAdmin()){alert('เฉพาะ Admin เท่านั้น');return;}
+    _showImportModal('deptHeads');return;
   }
   if(e.target.id==='btn-draw-dept-heads'){
     const drawn=_autoDrawDeptHeads();
@@ -6713,13 +6925,16 @@ function rTimetable(){
       // คำนวณบล็อกคาบตามหน่วยกิต + กลุ่มสาระ
       // คณิต/วิทย์: 0.5=[1], 1.0=[2], 1.5=[2,1], 2.0=[2,2], 2.5=[2,2,1], 3.0=[2,2,2]
       // สาระอื่น:   0.5=[1], 1.0=[1,1], 1.5=[1,1,1], 2.0=[1,1,1,1] (วันละ 1 คาบ)
+      const KARANG_GROUP='กลุ่มสาระการงานอาชีพ';
       function getPerBlocks(credit,group,code){
         // รหัสวิชาขึ้นต้นด้วย I → 2 คาบติดกันเสมอ (1 บล็อก)
         if(code&&code.trimStart().startsWith('I'))return[2];
         // รหัสวิชาขึ้นต้นด้วย ก → 1 คาบเสมอ (1 บล็อก)
         if(code&&code.trimStart().startsWith('ก'))return[1];
-        const allowDouble=BLOCK2_GROUPS.has(group);
+        // การงานอาชีพ 2 หน่วยกิต (4 slot) → 4 คาบติดกัน 1 บล็อก
         const totalSlots=Math.round(parseFloat(credit||1)/0.5);
+        if((group||'').includes('การงานอาชีพ')&&totalSlots===4)return[4];
+        const allowDouble=BLOCK2_GROUPS.has(group);
         if(!allowDouble) return Array(totalSlots).fill(1);
         const pairs=Math.floor(totalSlots/2);
         const singles=totalSlots%2;
@@ -7155,15 +7370,15 @@ function rTimetable(){
 
         function _findBlock(lv,rm,teacher,blockSize,localUsedDays,group,loc,ignoreLoc){
           const isSciMath=BLOCK2_GROUPS.has(group||'');
-          function getForbidden(strict){
-            // localUsedDays = วันที่ครูสอนห้องนี้ไปแล้ว (ทุกวิชา) → hard block เสมอไม่ว่า strict หรือไม่
-            const fb=new Set(localUsedDays);
+          function getForbidden(strict,ignUsedDays){
+            // localUsedDays = วันที่ครูสอนห้องนี้ไปแล้ว (ทุกวิชา) → hard block เสมอ ยกเว้นรอบสุดท้ายจริงๆ
+            const fb=ignUsedDays?new Set():new Set(localUsedDays);
             if(strict&&teacher){const key=_trKey(teacher,lv,rm);if(_teacherRoomDayMap[key])_teacherRoomDayMap[key].forEach(d=>fb.add(d));}
             return fb;
           }
           function tryFind(strict,maxConsec,allowDef,allowLate,ignLoc,ignUsedDays){
             // ignUsedDays=true เฉพาะรอบสุดท้ายสุด (วันไม่พอจริงๆ)
-            const forbidden=ignUsedDays?new Set():getForbidden(strict);
+            const forbidden=getForbidden(strict,ignUsedDays);
             if(!ignUsedDays&&strict&&teacher){const key=_trKey(teacher,lv,rm);if(_teacherRoomDayMap[key])_teacherRoomDayMap[key].forEach(d=>forbidden.add(d));}
             const daysToTry=_sortedDays(teacher,forbidden);
             const pers=_shufflePers(lv,allowDef,allowLate,isSciMath);
@@ -7300,7 +7515,7 @@ function rTimetable(){
 
           targetRooms.forEach(({lv,rm})=>{
             // ใช้ localUsedDays ร่วมกันข้ามวิชา สำหรับคู่ (ครู+ห้อง) เดียวกัน
-            // เพื่อให้วิชาที่ครูสอนห้องเดียวกันอยู่คนละวัน
+            // เพื่อให้วิชาที่ครูสอนห้องเดียวกันอยู่คนละวัน (HARD constraint ทุกกลุ่มสาระ)
             const trKey2=teacher?`${teacher}|${lv}/${rm}`:`_|${lv}/${rm}`;
             if(!_teacherRoomUsedDaysMap[trKey2])_teacherRoomUsedDaysMap[trKey2]=new Set();
             const localUsedDays=_teacherRoomUsedDaysMap[trKey2];
