@@ -5759,18 +5759,23 @@ function doPromoteAll(){
   if(!confirm('เลื่อนชั้น ปี '+CY+' → '+nextYear+':\n'+summary+'\n\n✅ ม.1 ใหม่จะถูกสร้างอัตโนมัติ\n🗑 ม.6 ('+m6+' คน) จะถูกลบออก\n\nดำเนินการต่อ?'))return;
   if(!D._students)D._students={};
   if(!D._classes)D._classes={};
-  // copy นักเรียน ม.1-ม.5 เลื่อนชั้น (ม.6 หาย)
+  // เลื่อนชั้น ม.1-ม.5 → ม.2-ม.6 (รักษาชื่อ รหัส และห้องเดิม)
   const promoted=[];
+  // เลื่อนจากสูงไปต่ำเพื่อไม่ชน
   ['ม.5','ม.4','ม.3','ม.2','ม.1'].forEach(lv=>{
     const toLv=lvMap[lv];
-    D._students[CY].filter(s=>s.level===lv).forEach(s=>{promoted.push({...s,level:toLv});});
+    D._students[CY].filter(s=>s.level===lv).forEach(s=>{
+      // เลื่อนชั้น: ชื่อ รหัส ห้องเดิมทุกอย่าง แค่เปลี่ยน level
+      promoted.push({...s, level:toLv});
+    });
   });
-  // สร้างนักเรียน ม.1 ใหม่
-  const rooms1=D.classes.filter(c=>c.level==='ม.1').map(c=>c.room);
+  // สร้างนักเรียน ม.1 ใหม่ (ครบทุกห้องเหมือนเดิม)
+  const rooms1=D.classes.filter(c=>c.level==='ม.1').map(c=>c.room).sort((a,b)=>+a-+b);
   let seq2=Date.now()%100000;
   const newM1=[];
   (rooms1.length?rooms1:[...Array(12)].map((_,i)=>String(i+1))).forEach(r=>{
-    genRoomNames(30+Math.floor(Math.random()*11)).forEach(name=>{
+    const count=D._students[CY].filter(s=>s.level==='ม.1'&&s.room===r).length||30;
+    genRoomNames(count).forEach(name=>{
       newM1.push({id:'N'+String(seq2++).padStart(5,'0'),name,level:'ม.1',room:r});
     });
   });
