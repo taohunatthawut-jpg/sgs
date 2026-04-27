@@ -1395,14 +1395,18 @@ function patchD(){
   if(!D._students){
     D._students={};
     if(Array.isArray(D.students)&&D.students.length){
-      D._students[CY]=D.students;
+      // migrate เข้าปีที่เก่าสุดใน D.years หรือ '2568' ไม่ใช่ CY ปัจจุบัน
+      const migrateYear=(D.years&&D.years.length)?[...D.years].sort()[0]:'2568';
+      D._students[migrateYear]=D.students;
     }
     delete D.students;
   }
   if(!D._classes){
     D._classes={};
     if(Array.isArray(D.classes)&&D.classes.length){
-      D._classes[CY]=D.classes;
+      // migrate เข้าปีที่เก่าสุดใน D.years หรือ '2568' ไม่ใช่ CY ปัจจุบัน
+      const migrateYear=(D.years&&D.years.length)?[...D.years].sort()[0]:'2568';
+      D._classes[migrateYear]=D.classes;
     }
     delete D.classes;
   }
@@ -1421,7 +1425,7 @@ function patchD(){
     Object.defineProperty(D,'students',{
       get(){
         if(!this._students)this._students={};
-        if(!this._students[CY])this._students[CY]=_genStudents();
+        if(!this._students[CY])this._students[CY]=[];
         return this._students[CY];
       },
       set(v){
@@ -1439,8 +1443,9 @@ function patchD(){
       get(){
         if(!this._classes)this._classes={};
         if(!this._classes[CY]){
-          // copy structure from any existing year, clear teachers
-          const baseYear=Object.keys(this._classes)[0];
+          // copy structure from earliest year as base, clear teachers
+          const allYears=Object.keys(this._classes).sort();
+          const baseYear=allYears[0];
           if(baseYear){
             this._classes[CY]=JSON.parse(JSON.stringify(this._classes[baseYear])).map(c=>({...c,teachers:[]}));
           } else {
