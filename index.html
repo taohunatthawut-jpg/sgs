@@ -5769,14 +5769,17 @@ function doPromoteAll(){
       promoted.push({...s, level:toLv});
     });
   });
-  // สร้างนักเรียน ม.1 ใหม่ (ครบทุกห้องเหมือนเดิม)
-  const rooms1=D.classes.filter(c=>c.level==='ม.1').map(c=>c.room).sort((a,b)=>+a-+b);
-  let seq2=Date.now()%100000;
+  // สร้างนักเรียน ม.1 ใหม่ครบทุกห้อง
+  const rooms1=D._students[CY].filter(s=>s.level==='ม.1').map(s=>s.room).filter((v,i,a)=>a.indexOf(v)===i).sort((a,b)=>+a-+b);
+  // หา id ตัวเลขสูงสุดที่มีอยู่ทั้งหมดในทุกปี เพื่อรหัสใหม่ไม่ซ้ำ
+  let maxId=0;
+  Object.values(D._students).forEach(arr=>arr.forEach(s=>{const n=parseInt(s.id);if(!isNaN(n)&&n>maxId)maxId=n;}));
+  let seq2=maxId+1;
   const newM1=[];
   (rooms1.length?rooms1:[...Array(12)].map((_,i)=>String(i+1))).forEach(r=>{
     const count=D._students[CY].filter(s=>s.level==='ม.1'&&s.room===r).length||30;
     genRoomNames(count).forEach(name=>{
-      newM1.push({id:'N'+String(seq2++).padStart(5,'0'),name,level:'ม.1',room:r});
+      newM1.push({id:String(seq2++).padStart(5,'0'),name,level:'ม.1',room:r});
     });
   });
   D._students[nextYear]=[...promoted,...newM1];
