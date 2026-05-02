@@ -131,10 +131,13 @@ input:checked+.sw-slider:before{transform:translateX(18px)}
 .pp6-info{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;font-size:12px;padding:8px 10px;background:#f5f5f5;border:1px solid #ccc;border-radius:4px;margin-bottom:10px}
 .pp6-info span{display:flex;gap:4px}
 .pp6-info strong{white-space:nowrap}
-.pp6-cols{display:grid;grid-template-columns:80px 1fr 36px 60px 44px 80px;font-size:11px;font-weight:700;padding:5px 6px;background:#1a2744;color:#fff;border-radius:4px 4px 0 0;margin-bottom:0}
-.pp6-row{display:grid;grid-template-columns:80px 1fr 36px 60px 44px 80px;font-size:11px;padding:5px 6px;border-bottom:1px solid #ddd}
-.pp6-row:nth-child(even){background:#f9f9f9}
-.pp6-row:last-child{border-bottom:none}
+.pp6-tbl{width:100%;border-collapse:collapse;font-size:11px;border:1px solid #000}
+.pp6-tbl th,.pp6-tbl td{border:none;border-right:1px solid #000;padding:4px 6px;vertical-align:middle;background:#fff!important;color:#000}
+.pp6-tbl th{text-align:center;font-weight:700;font-size:11px;white-space:normal;border-bottom:1px solid #000}
+.pp6-tbl td{font-size:11px}
+.pp6-tbl th:last-child,.pp6-tbl td:last-child{border-right:none}
+
+
 .pp6-sign{display:flex;justify-content:space-around;margin-top:1.5cm;font-size:11px;font-family:'Sarabun',sans-serif}
 .pp6-sign div{text-align:center}
 .pp6-sign .line{margin-bottom:3px}
@@ -627,8 +630,18 @@ label.rm-chk-item:has(input:checked){background:#e3f2fd;border-color:#90caf9;col
   </div>
   <div class="card admin-setting">
     <div class="card-title">🏫 ข้อมูลโรงเรียน</div>
-    <div class="fr" style="gap:12px">
+    <div class="fr" style="gap:12px;align-items:flex-start">
       <div style="flex:1"><div style="font-size:11px;color:#888;margin-bottom:4px">ชื่อโรงเรียน</div><input type="text" id="set-school" style="width:100%"/></div>
+      <div>
+        <div style="font-size:11px;color:#888;margin-bottom:4px">ตราโรงเรียน</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <img id="logo-preview" src="" style="width:48px;height:48px;object-fit:contain;border:1px solid #dde;border-radius:6px;display:none"/>
+          <label style="cursor:pointer;padding:5px 10px;border:1px solid #dde;border-radius:8px;font-size:12px;background:#f8f9fa">
+            📁 เลือกรูป<input type="file" id="logo-upload" accept="image/*" style="display:none"/>
+          </label>
+          <button id="btn-clear-logo" style="font-size:11px;padding:4px 8px;color:#c0392b;border:1px solid #ef9a9a;border-radius:6px;background:#ffebee;display:none">✕ ลบ</button>
+        </div>
+      </div>
       <div><div style="font-size:11px;color:#888;margin-bottom:4px">เพิ่มปีการศึกษา</div>
         <div class="fr"><input type="text" id="new-year" style="width:80px"/><button id="btn-add-year" class="bp">+ เพิ่ม</button></div>
       </div>
@@ -3690,6 +3703,27 @@ function rSettings(){
   if(btnSaveGrades)btnSaveGrades.style.display=isAdm?'':'none';
   const school=document.getElementById('set-school');
   if(school)school.value=D.school||'';
+  // logo preview
+  const logoPreview=document.getElementById('logo-preview');
+  const btnClearLogo=document.getElementById('btn-clear-logo');
+  if(logoPreview){
+    if(D.schoolLogo){logoPreview.src=D.schoolLogo;logoPreview.style.display='';if(btnClearLogo)btnClearLogo.style.display='';}
+    else{logoPreview.style.display='none';if(btnClearLogo)btnClearLogo.style.display='none';}
+  }
+  const logoUpload=document.getElementById('logo-upload');
+  if(logoUpload&&!logoUpload._bound){logoUpload._bound=true;
+    logoUpload.addEventListener('change',function(){
+      const file=this.files[0];if(!file)return;
+      const reader=new FileReader();
+      reader.onload=e=>{
+        D.schoolLogo=e.target.result;
+        if(logoPreview){logoPreview.src=D.schoolLogo;logoPreview.style.display='';}
+        if(btnClearLogo)btnClearLogo.style.display='';
+        saveAll();
+      };
+      reader.readAsDataURL(file);
+    });
+  }
   const W=D.weights;
 
   // สัดส่วนคะแนน — สร้างด้วย DOM เพื่อหลีกเลี่ยง nested template
@@ -4151,67 +4185,106 @@ function buildPP6(sid){
   const gpaStr=myGPA>=0?myGPA.toFixed(2):'–';
   // GPAX removed
 
-  const rows=sjs.map((sj,ri)=>{
+  // จำแนกวิชา: พื้นฐาน / เพิ่มเติม / กิจกรรม
+  // รหัสวิชา: ตัวอักษร 2 ตัว + ตัวเลข 5 ตัว เช่น ค31101
+  // ตัวเลขตำแหน่งที่ 3 (index 2 ของตัวเลข = index 4 ของรหัส): 1 = พื้นฐาน, อื่น = เพิ่มเติม
+  function sjType(sj){
+    const code=(sj.code||'').trim();
+    if(code.startsWith('ก'))return'activity';
+    // หาตัวเลขตัวที่ 3 ของส่วนตัวเลข (เลขหลักร้อยของ 5 หลัก)
+    const digits=code.replace(/^[^\d]*/,''); // ตัดอักษรนำหน้าออก
+    return digits[2]==='1'?'basic':'extra';
+  }
+
+  function renderRow(sj){
     const rec=getRec(sid,sj.id);
     const isGuidance=sj.code&&sj.code.startsWith('ก');
     const hasScore=rec&&hasAnyScore(rec);
     const tot=(!isGuidance&&hasScore)?totalScore(rec,sj.id):null;
     const gr=hasScore?gradeResult(rec,sj.id):null;
     const isRO=gr==='RO';const gi=isRO?null:(gr||null);
-    const crFmt=isGuidance?(gi?'0.0':'–'):(parseFloat(sj.credit)>0?parseFloat(sj.credit).toFixed(1):'–');
+    const crFmt=isGuidance?'0.0':(parseFloat(sj.credit)>0?parseFloat(sj.credit).toFixed(1):'');
     const grFmt=isGuidance
-      ?(gi?`<span style="font-weight:700;color:#000">${gi.label}</span>`:'–')
-      :(isRO?'ร':gi?(gi.label.endsWith('.0')?gi.label.slice(0,-2):gi.label):'–');
-    const totFmt=isGuidance?(gi?'0.0':'–'):(tot!==null?tot.toFixed(1):'–');
-    const grColor='#000';
-    return`<div class="pp6-row">
-      <span>${sj.code}</span>
-      <span>${sj.name}</span>
-      <span style="text-align:center">${crFmt}</span>
-      <span style="text-align:center;font-weight:700">${totFmt}</span>
-      <span style="text-align:center;font-weight:700;color:${grColor}">${grFmt}</span>
-      <span>${teacherFmt(sj.teacher)}</span>
-    </div>`;
-  }).join('');
+      ?(gi?`<span style="font-weight:700">${gi.label}</span>`:'')
+      :(isRO?'ร':gi?(gi.label.endsWith('.0')?gi.label.slice(0,-2):gi.label):'');
+    const totFmt=isGuidance?(gi?'0.0':''):(tot!==null?tot.toFixed(1):'');
+    return`<tr>
+      <td style="padding:3px 6px">${sj.code}</td>
+      <td style="padding:3px 6px">${sj.name}</td>
+      <td style="padding:3px 6px;text-align:center">${crFmt}</td>
+      <td style="padding:3px 6px;text-align:center;font-weight:700">${totFmt}</td>
+      <td style="padding:3px 6px;text-align:center;font-weight:700">${grFmt}</td>
+      <td style="padding:3px 6px">${teacherFmt(sj.teacher)}</td>
+    </tr>`;
+  }
+  function sortSjs(arr){
+    return [...arr].sort((a,b)=>{
+      const ca=parseFloat(a.credit)||0,cb=parseFloat(b.credit)||0;
+      if(cb!==ca)return cb-ca;
+      return(a.code||'').localeCompare(b.code||'');
+    });
+  }
+  const basicSjs=sortSjs(sjs.filter(sj=>sjType(sj)==='basic'));
+  const extraSjs=sortSjs(sjs.filter(sj=>sjType(sj)==='extra'));
+  const actSjs=sortSjs(sjs.filter(sj=>sjType(sj)==='activity'));
+  // group header: NO colspan — 6 individual tds, col1 wide enough for longest label
+  const grpHdr=(label)=>`<tr>
+    <td style="padding:4px 6px;font-weight:700;font-size:11px;white-space:nowrap">${label}</td>
+    <td></td><td></td><td></td><td></td><td></td>
+  </tr>`;
+  let rows='';
+  if(basicSjs.length){rows+=grpHdr('วิชาพื้นฐาน');rows+=basicSjs.map(renderRow).join('');}
+  if(extraSjs.length){rows+=grpHdr('วิชาเพิ่มเติม');rows+=extraSjs.map(renderRow).join('');}
+  if(actSjs.length){rows+=grpHdr('กิจกรรมพัฒนาผู้เรียน');rows+=actSjs.map(renderRow).join('');}
 
   const totalCredit=sjs.reduce((s,sj)=>{if(sj.code&&sj.code.startsWith('ก'))return s;return s+(parseFloat(sj.credit)||0);},0);
 
   return`<div class="pp6-page">
     <div class="pp6-hdr">
+      ${D.schoolLogo?`<img src="${D.schoolLogo}" style="width:72px;height:72px;object-fit:contain;margin-bottom:4px"/>`:''} 
       <div class="title">ใบรายงานผลการเรียน (ปพ.6)</div>
       <div class="school">${D.school}</div>
       <div class="year">ปีการศึกษา ${CY} &nbsp;|&nbsp; ภาคเรียนที่ ${CT}</div>
     </div>
-    <!-- ข้อมูลนักเรียน -->
     <table style="border-collapse:collapse;width:100%;margin-bottom:10px;font-size:12px">
       <tr>
-        <td style="border:1px solid #ccc;padding:5px 10px;width:50%"><strong>ชื่อ-สกุล:</strong>&nbsp;${s.name}</td>
-        <td style="border:1px solid #ccc;padding:5px 10px"><strong>รหัสนักเรียน:</strong>&nbsp;${s.id}</td>
+        <td style="border:1px solid #000;padding:5px 10px;width:50%"><strong>ชื่อ-สกุล:</strong>&nbsp;${s.name}</td>
+        <td style="border:1px solid #000;padding:5px 10px"><strong>รหัสนักเรียน:</strong>&nbsp;${s.id}</td>
       </tr>
       <tr>
-        <td style="border:1px solid #ccc;padding:5px 10px"><strong>ระดับชั้น:</strong>&nbsp;${s.level}&nbsp;&nbsp;<strong>ห้อง:</strong>&nbsp;${s.room}</td>
-        <td style="border:1px solid #ccc;padding:5px 10px"><strong>จำนวนนักเรียนในห้อง:</strong>&nbsp;${classmates.length} คน</td>
+        <td style="border:1px solid #000;padding:5px 10px"><strong>ระดับชั้น:</strong>&nbsp;${s.level}&nbsp;&nbsp;<strong>ห้อง:</strong>&nbsp;${s.room}</td>
+        <td style="border:1px solid #000;padding:5px 10px"><strong>จำนวนนักเรียนในห้อง:</strong>&nbsp;${classmates.length} คน</td>
       </tr>
     </table>
-    <!-- รายวิชา -->
-    <div class="pp6-cols">
-      <span>รหัสวิชา</span><span>ชื่อวิชา</span><span style="text-align:center">น.ก.</span><span style="text-align:center">คะแนนรวม</span><span style="text-align:center">เกรด</span><span>ครูผู้สอน</span>
-    </div>
-    ${rows}
-    <div style="border-top:1.5px solid #1a2744;margin-top:1px"></div>
-    <!-- สรุปผลการเรียน -->
+    <table class="pp6-tbl" style="width:100%">
+      <colgroup>
+        <col style="width:145px"/><col/><col style="width:40px"/><col style="width:65px"/><col style="width:48px"/><col style="width:100px"/>
+      </colgroup>
+      <thead>
+        <tr>
+          <th>รหัสวิชา</th>
+          <th>ชื่อวิชา</th>
+          <th>น.ก.</th>
+          <th>คะแนน<br/>รวม</th>
+          <th>เกรด</th>
+          <th>ครูผู้สอน</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>
     <table style="border-collapse:collapse;width:100%;margin-top:8px;font-size:12px">
       <tr>
-        <td style="border:1px solid #ccc;padding:5px 10px"><strong>รวมหน่วยกิต:</strong>&nbsp;${totalCredit}</td>
-        <td style="border:1px solid #ccc;padding:5px 10px"><strong>GPA ภาคนี้:</strong>&nbsp;<strong style="font-size:14px;color:#000">${gpaStr}</strong></td>
-        <td style="border:1px solid #ccc;padding:5px 10px" colspan="2"><strong>GPAX สะสม:</strong>&nbsp;<strong style="font-size:14px;color:#000">${getGPAX(sid)}</strong></td>
+        <td style="border:1px solid #000;padding:5px 10px"><strong>รวมหน่วยกิต:</strong>&nbsp;${totalCredit}</td>
+        <td style="border:1px solid #000;padding:5px 10px"><strong>GPA ภาคนี้:</strong>&nbsp;<strong style="font-size:14px;color:#000">${gpaStr}</strong></td>
+        <td style="border:1px solid #000;padding:5px 10px" colspan="2"><strong>GPAX สะสม:</strong>&nbsp;<strong style="font-size:14px;color:#000">${getGPAX(sid)}</strong></td>
       </tr>
       <tr>
-        <td style="border:1px solid #ccc;padding:5px 10px" colspan="2"><strong>ลำดับที่ในห้อง:</strong>&nbsp;<strong style="font-size:14px;color:#000">${myRank}</strong>${typeof myRank==='number'?' / '+cmWithGPA.length:''}</td>
-        <td style="border:1px solid #ccc;padding:5px 10px" colspan="2"><strong>ลำดับที่ในระดับ:</strong>&nbsp;<strong style="font-size:14px;color:#000">${myLvRank}</strong>${typeof myLvRank==='number'?' / '+lvWithGPA.length:''}</td>
+        <td style="border:1px solid #000;padding:5px 10px" colspan="2"><strong>ลำดับที่ในห้อง:</strong>&nbsp;<strong style="font-size:14px;color:#000">${myRank}</strong>${typeof myRank==='number'?' / '+cmWithGPA.length:''}</td>
+        <td style="border:1px solid #000;padding:5px 10px" colspan="2"><strong>ลำดับที่ในระดับ:</strong>&nbsp;<strong style="font-size:14px;color:#000">${myLvRank}</strong>${typeof myLvRank==='number'?' / '+lvWithGPA.length:''}</td>
       </tr>
     </table>
-    <!-- ลายเซ็น -->
     <div class="pp6-sign">
       <div style="text-align:center">
         <div style="margin-bottom:3px">ลงชื่อ <span style="display:inline-block;border-bottom:1px solid #000;min-width:30px;padding:0 12px;color:transparent;white-space:nowrap">${getClassTeachers(s.level,s.room).join(' / ')||'ครูที่ปรึกษา'}</span></div>
@@ -4226,6 +4299,7 @@ function buildPP6(sid){
     </div>
   </div>`;
 }
+
 
 // ── ROSTER (ใบรายชื่อนักเรียน) ──────────────────────────────────────────────
 function rRoster(){
@@ -4249,6 +4323,7 @@ function buildRosterHTML(){
       .sort((a,b)=>a.name.localeCompare(b.name,'th'));
     if(!stus.length)return;
     html+=`<div class="roster-page">
+      ${D.schoolLogo?`<div style="text-align:center;margin-bottom:4px"><img src="${D.schoolLogo}" style="width:72px;height:72px;object-fit:contain"/></div>`:''}
       <h2>${D.school}</h2>
       <div class="r-sub">ใบรายชื่อนักเรียน &nbsp;|&nbsp; ระดับ${rlv} ห้อง ${rrm} &nbsp;|&nbsp; ปีการศึกษา ${CY} ภาคเรียนที่ ${CT} &nbsp;|&nbsp; จำนวน ${stus.length} คน</div>
       <table>
@@ -4838,6 +4913,7 @@ function buildRemedialPrintHTML(){
   const _pDate=_pNow.toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'});
   const _pTime=_pNow.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
   return`<div class="remedial-page">
+    ${D.schoolLogo?`<div style="text-align:center;margin-bottom:4px"><img src="${D.schoolLogo}" style="width:72px;height:72px;object-fit:contain"/></div>`:''}
     <h2>${D.school}</h2>
     <div class="r-sub">
       ใบบันทึกการแก้ไขผลการเรียน &nbsp;|&nbsp; ปีการศึกษา ${year} ภาคเรียนที่ ${term}<br>
@@ -4961,6 +5037,7 @@ function buildExportHTML(year,term,sjId,lv,rm,type){
       </tr>`;
     }).join('');
     html+=`<div class="remedial-page">
+      ${D.schoolLogo?`<div style="text-align:center;margin-bottom:4px"><img src="${D.schoolLogo}" style="width:72px;height:72px;object-fit:contain"/></div>`:''}
       <h2>${D.school}</h2>
       <div class="r-sub">
         ใบบันทึกการแก้ไขผลการเรียน &nbsp;|&nbsp; ปีการศึกษา ${year} ภาคเรียนที่ ${term}<br>
@@ -5033,13 +5110,17 @@ function _printCSS(){
   "h2{font-size:15px;font-weight:700;text-align:center;margin-bottom:6px}"+
   ".pp6-page,.rpt-page,.roster-page,.remedial-page{page-break-after:always;padding:8mm 12mm;display:block}"+
   ".pp6-page:last-child,.rpt-page:last-child,.roster-page:last-child,.remedial-page:last-child{page-break-after:avoid}"+
-  ".pp6-hdr{text-align:center;margin-bottom:12px;border-bottom:2px solid #1a2744;padding-bottom:8px}"+
+  ".pp6-hdr{text-align:center;margin-bottom:10px}"+
   ".pp6-hdr .title{font-size:18px;font-weight:700;color:#000}"+
   ".pp6-hdr .school{font-size:14px;font-weight:600;margin-top:3px}"+
   ".pp6-hdr .year{font-size:12px;color:#000;margin-top:2px}"+
-  ".pp6-cols{display:grid;grid-template-columns:90px 1fr 40px 70px 50px 90px;font-size:11px;font-weight:700;padding:5px 6px;background:#dde;border:1px solid #aab}"+
-  ".pp6-row{display:grid;grid-template-columns:90px 1fr 40px 70px 50px 90px;font-size:11px;padding:4px 6px;border:1px solid #ddd;border-top:none}"+
-  ".pp6-sign{display:flex;justify-content:space-around;margin-top:2cm;gap:1rem;page-break-inside:avoid}"+
+  
+  
+  
+  
+  
+  
+  ".pp6-tbl{width:100%;border-collapse:collapse;font-size:11px;border:1px solid #000}"+".pp6-tbl th,.pp6-tbl td{border:none;border-right:1px solid #000;padding:4px 6px;vertical-align:middle;background:#fff!important;color:#000}"+".pp6-tbl th{text-align:center;font-weight:700;font-size:11px;white-space:normal;border-bottom:1px solid #000}"+".pp6-tbl td{font-size:11px}"+".pp6-tbl th:last-child,.pp6-tbl td:last-child{border-right:none}"+".pp6-sign{display:flex;justify-content:space-around;margin-top:2cm;gap:1rem;page-break-inside:avoid}"+
   ".pp6-sign>div,.rem-sign>div{text-align:center;flex:1}"+
   ".line{display:inline-block;border-bottom:1px solid #000;min-width:140px;margin-bottom:4px}"+
   ".roster-page h2,.remedial-page h2{font-size:14px;text-align:center;font-weight:700;margin-bottom:4px}"+
@@ -6150,6 +6231,7 @@ document.getElementById('mn').addEventListener('click',e=>{
     if(m){m.textContent='บันทึกแล้ว ✓';setTimeout(()=>{m.textContent='';},3000);}
     return;
   }
+  if(e.target.id==='btn-clear-logo'){delete D.schoolLogo;saveAll();rSettings();return;}
   if(e.target.id==='btn-save-school'){
     D.school=document.getElementById('set-school').value.trim()||'โรงเรียน';
     const ny=document.getElementById('new-year').value.trim();
@@ -6907,7 +6989,6 @@ function rTimetable(){
 
       const existCount=tt.slots.length;
       if(existCount>0){
-        if(!confirm('มีตารางเดิม '+existCount+' slot อยู่แล้ว ต้องการล้างแล้วสร้างใหม่?'))return;
         tt.slots=[];
       }
 
@@ -7022,7 +7103,7 @@ function rTimetable(){
           return fb;
         }
 
-        // เรียงวัน: วันที่ครูสอนน้อยก่อน + สุ่มเล็กน้อย
+        // เรียงวัน: วันที่ครูสอนน้อยก่อน (ไม่สุ่ม เพื่อให้คาบแรกเต็มก่อน)
         function sortedDays(forbidden){
           return [...days]
             .filter(d=>!forbidden.has(d))
@@ -7032,7 +7113,7 @@ function rTimetable(){
                 if(teacher&&teacherSlotMap[tchKey(teacher,a,p)])ca++;
                 if(teacher&&teacherSlotMap[tchKey(teacher,b,p)])cb++;
               }
-              return ca-cb+(Math.random()-.5)*.5;
+              return ca-cb;
             });
         }
 
@@ -7057,11 +7138,19 @@ function rTimetable(){
               else preferred.push(p);
             }
           }
-          function sh(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}}
-          sh(preferred); sh(deferred); sh(late);
-          let result=[...preferred];
-          if(allowDeferred) result=[...result,...deferred];
-          if(allowLate) result=[...result,...late];
+          // weighted random: คาบต้นๆ มีน้ำหนักมากกว่า → มักถูกเลือกก่อน แต่ยังสุ่มได้
+          function weightedShuffle(arr){
+            const n=arr.length;
+            if(!n)return arr;
+            const weighted=arr.map((p,i)=>({p,w:Math.pow(n-i,2)*Math.random()}));
+            weighted.sort((a,b)=>b.w-a.w);
+            return weighted.map(x=>x.p);
+          }
+          // เรียงก่อนให้คาบน้อยอยู่ต้น แล้ว weighted shuffle
+          preferred.sort((a,b)=>a-b); deferred.sort((a,b)=>a-b); late.sort((a,b)=>a-b);
+          let result=weightedShuffle(preferred);
+          if(allowDeferred) result=[...result,...weightedShuffle(deferred)];
+          if(allowLate) result=[...result,...weightedShuffle(late)];
           return result;
         }
 
@@ -7360,7 +7449,7 @@ function rTimetable(){
               if(teacher&&_teacherSlotMap[_tchKey(teacher,a,p)])ca++;
               if(teacher&&_teacherSlotMap[_tchKey(teacher,b,p)])cb++;
             }
-            return ca-cb+(Math.random()-.5)*.5;
+            return ca-cb;
           });
         }
 
@@ -7373,11 +7462,18 @@ function rTimetable(){
             const isDef=isSciMath?p>=lunchIdx:p===lastPer;
             if(isDef)deferred.push(p);else preferred.push(p);
           }
-          function sh(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}}
-          sh(preferred);sh(deferred);sh(late);
-          let r=[...preferred];
-          if(allowDeferred)r=[...r,...deferred];
-          if(allowLate)r=[...r,...late];
+          // weighted random: คาบต้นๆ มีน้ำหนักมากกว่า → มักถูกเลือกก่อน แต่ยังสุ่มได้
+          function weightedShuffle(arr){
+            const n=arr.length;
+            if(!n)return arr;
+            const weighted=arr.map((p,i)=>({p,w:Math.pow(n-i,2)*Math.random()}));
+            weighted.sort((a,b)=>b.w-a.w);
+            return weighted.map(x=>x.p);
+          }
+          preferred.sort((a,b)=>a-b);deferred.sort((a,b)=>a-b);late.sort((a,b)=>a-b);
+          let r=weightedShuffle(preferred);
+          if(allowDeferred)r=[...r,...weightedShuffle(deferred)];
+          if(allowLate)r=[...r,...weightedShuffle(late)];
           return r;
         }
 
@@ -7686,7 +7782,7 @@ function rTimetable(){
         return{slots:_slots,failed:_failed,added:_added};
       }
 
-      // ── Multi-pass: Smart mode วน 15 รอบ, ปกติวน 5 รอบ ────────────────────
+      // ── Multi-pass: Smart mode วน 15 รอบ, ปกติวน 5 รอบ (weighted random → ได้ผลต่างกันได้) ──
       const maxPasses = useSmartMode ? 15 : 5;
       let bestResult = null;
 
@@ -7700,26 +7796,21 @@ function rTimetable(){
       });
 
       for(let pass=0;pass<maxPasses;pass++){
-        let orderSjs;
-        if(pass===0){
-          orderSjs=baseSorted;
-        } else {
-          // สุ่มลำดับให้ได้ pattern ต่างกัน — pass คี่: สุ่มมากขึ้น
-          orderSjs=[...baseSorted];
-          const aggressiveness = pass<5 ? 0.5 : 0.8;
-          for(let i=orderSjs.length-1;i>0;i--){
-            const a=orderSjs[i],b=orderSjs[i-1];
-            const sameCredit=parseFloat(a.credit||0)===parseFloat(b.credit||0);
-            const sameRooms=(resolveRoomCount(a))===(resolveRoomCount(b));
-            if(sameCredit&&sameRooms&&Math.random()<aggressiveness){[orderSjs[i],orderSjs[i-1]]=[orderSjs[i-1],orderSjs[i]];}
-            else if(!sameCredit&&Math.random()<(pass<5?0.2:0.4)){[orderSjs[i],orderSjs[i-1]]=[orderSjs[i-1],orderSjs[i]];}
-          }
+        let orderSjs=[...baseSorted];
+        // สุ่มลำดับวิชาที่เครดิตเท่ากันให้ต่างกันในแต่ละ pass
+        const aggressiveness = pass===0 ? 0.6 : (pass<5 ? 0.5 : 0.8);
+        for(let i=orderSjs.length-1;i>0;i--){
+          const a=orderSjs[i],b=orderSjs[i-1];
+          const sameCredit=parseFloat(a.credit||0)===parseFloat(b.credit||0);
+          const sameRooms=(resolveRoomCount(a))===(resolveRoomCount(b));
+          if(sameCredit&&sameRooms&&Math.random()<aggressiveness){[orderSjs[i],orderSjs[i-1]]=[orderSjs[i-1],orderSjs[i]];}
+          else if(!sameCredit&&Math.random()<0.15){[orderSjs[i],orderSjs[i-1]]=[orderSjs[i-1],orderSjs[i]];}
         }
 
         const result=runOnePass(orderSjs);
         if(!bestResult||result.failed.length<bestResult.failed.length){
           bestResult=result;
-          if(bestResult.failed.length===0)break;
+          if(bestResult.failed.length===0&&pass>=2)break; // วนอย่างน้อย 3 pass ก่อนหยุด
         }
       }
 
@@ -7842,7 +7933,8 @@ function _buildRoomLocCard(loc){
   });
   const nPer2=tt.periods.length;
   const lastPer2=nPer2-1;
-  let html=`<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:4px">${title}</div><div style="font-size:11px;color:#888;margin-bottom:12px">${sub}</div>`;
+  const _logoRL=D.schoolLogo?`<img src="${D.schoolLogo}" style="width:36px;height:36px;object-fit:contain;flex-shrink:0;margin-bottom:0"/>`:'';
+  let html=`<div class="card"><div style="display:flex;align-items:flex-end;gap:10px;margin-bottom:6px">${_logoRL}<div style="margin-bottom:0;padding-bottom:0"><div style="font-size:14px;font-weight:700;line-height:1.3;margin:0">${title}</div><div style="font-size:11px;color:#888;line-height:1.3;margin:0">${sub}</div></div></div>`;
   html+=`<div class="tt-wrap"><table class="tt-grid"><thead><tr><th style="width:52px">วัน/คาบ</th>`;
   tt.periods.forEach(p=>{html+=`<th><div>${p.label}</div><div style="font-size:9px;opacity:.8">${p.time}</div></th>`;});
   html+=`</tr></thead><tbody>`;
@@ -7941,7 +8033,8 @@ function _buildTTCard(lv,rm,teacher,withDel){
     return`<div style="background:#fff0f0;border:1.5px solid #e74c3c;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#c0392b"><strong>⚠️ พบ ${items.length} คาบครูชนตาราง:</strong><ul style="margin:4px 0 0 16px;padding:0">${items.map(i=>`<li>${i}</li>`).join('')}</ul></div>`;
   })():'';
 
-  let html=`<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:4px">${title}</div><div style="font-size:11px;color:#888;margin-bottom:8px">${sub}</div>${_conflictBanner}`;
+  const _logoTT=D.schoolLogo?`<img src="${D.schoolLogo}" style="width:36px;height:36px;object-fit:contain;flex-shrink:0;margin-bottom:0"/>`:'';
+  let html=`<div class="card"><div style="display:flex;align-items:flex-end;gap:10px;margin-bottom:6px">${_logoTT}<div style="margin-bottom:0;padding-bottom:0"><div style="font-size:14px;font-weight:700;line-height:1.3;margin:0">${title}</div><div style="font-size:11px;color:#888;line-height:1.3;margin:0">${sub}</div></div></div>${_conflictBanner}`;
   html+=`<div class="tt-wrap"><table class="tt-grid"><thead><tr><th style="width:52px">วัน/คาบ</th>`;
   tt.periods.forEach(p=>{html+=`<th><div>${p.label}</div><div style="font-size:9px;opacity:.8">${p.time}</div></th>`;});
   html+=`</tr></thead><tbody>`;
