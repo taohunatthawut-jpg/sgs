@@ -7025,9 +7025,18 @@ function rTimetable(){
         if(code&&code.trimStart().startsWith('I'))return[2];
         // รหัสวิชาขึ้นต้นด้วย ก → 1 คาบเสมอ (1 บล็อก)
         if(code&&code.trimStart().startsWith('ก'))return[1];
-        // การงานอาชีพ 2 หน่วยกิต (4 slot) → 4 คาบติดกัน 1 บล็อก
         const totalSlots=Math.round(parseFloat(credit||1)/0.5);
-        if((group||'').includes('การงานอาชีพ')&&totalSlots===4)return[4];
+        const codeDigits=(code||'').replace(/^[^\d]*/,''); // ตัดอักษรนำหน้า
+        const isExtra=codeDigits.length>=3&&codeDigits[2]==='2'; // หลักที่ 3 = 2 → เพิ่มเติม
+        // อ เพิ่มเติม: 1นก.(2slot)→[2], 1.5นก.(3slot)→[2,1]
+        if(code&&code.trimStart().startsWith('อ')&&isExtra){
+          if(totalSlots===2)return[2];
+          if(totalSlots===3)return[2,1];
+        }
+        // ง ทุกวิชา: 2นก.(4slot) → [2,2] คนละวัน แทนที่จะเป็น [4]
+        if(code&&code.trimStart().startsWith('ง')&&totalSlots===4)return[2,2];
+        // การงานอาชีพ 2 หน่วยกิต (4 slot) → [2,2] คนละวัน
+        if((group||'').includes('การงานอาชีพ')&&totalSlots===4)return[2,2];
         const allowDouble=BLOCK2_GROUPS.has(group);
         if(!allowDouble) return Array(totalSlots).fill(1);
         const pairs=Math.floor(totalSlots/2);
