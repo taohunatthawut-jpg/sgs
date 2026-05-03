@@ -7014,7 +7014,7 @@ function rTimetable(){
 
       // กลุ่มสาระที่อนุญาตให้ 2 คาบติดกัน (1.0 น.ก. = [2])
       // สาระอื่นจะแยกเป็น [1,1] วันละคาบ
-      const BLOCK2_GROUPS=new Set(['กลุ่มสาระคณิตศาสตร์','กลุ่มสาระวิทยาศาสตร์และเทคโนโลยี']);
+      const BLOCK2_GROUPS=new Set(['กลุ่มสาระคณิตศาสตร์','กลุ่มสาระวิทยาศาสตร์และเทคโนโลยี','กลุ่มสาระภาษาต่างประเทศ']);
 
       // คำนวณบล็อกคาบตามหน่วยกิต + กลุ่มสาระ
       // คณิต/วิทย์: 0.5=[1], 1.0=[2], 1.5=[2,1], 2.0=[2,2], 2.5=[2,2,1], 3.0=[2,2,2]
@@ -7026,10 +7026,10 @@ function rTimetable(){
         // รหัสวิชาขึ้นต้นด้วย ก → 1 คาบเสมอ (1 บล็อก)
         if(code&&code.trimStart().startsWith('ก'))return[1];
         const totalSlots=Math.round(parseFloat(credit||1)/0.5);
-        const codeDigits=(code||'').replace(/^[^\d]*/,''); // ตัดอักษรนำหน้า
-        const isExtra=codeDigits.length>=3&&codeDigits[2]==='2'; // หลักที่ 3 = 2 → เพิ่มเติม
+        const codeDigits=(code||'').replace(/^\D+/,''); // ตัดอักษรนำหน้าทั้งหมด
+        const isExtra=codeDigits.length>=3&&codeDigits.charAt(2)==='2'; // หลักที่ 3 = 2 → เพิ่มเติม
         // อ เพิ่มเติม: 1นก.(2slot)→[2], 1.5นก.(3slot)→[2,1]
-        if(code&&code.trimStart().startsWith('อ')&&isExtra){
+        if(code&&code.trim().startsWith('อ')&&isExtra){
           if(totalSlots===2)return[2];
           if(totalSlots===3)return[2,1];
         }
