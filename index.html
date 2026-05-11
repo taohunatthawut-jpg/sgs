@@ -513,10 +513,176 @@ label.rm-chk-item:has(input:checked){background:#e3f2fd;border-color:#90caf9;col
     <div class="tb" style="margin-bottom:0">
       <select id="gr-teacher"><option value="">— เลือกครูผู้สอน —</option></select>
       <select id="gr-assign"><option value="">— เลือกวิชา/ห้อง —</option></select>
+      <button id="btn-save-gr-top" onclick="saveAll();const m=document.getElementById('gr-msg-top');if(m){m.textContent='✅ บันทึกแล้ว';setTimeout(()=>m.textContent='',2000);}" class="bp" style="white-space:nowrap">💾 บันทึก</button>
+      <span id="gr-msg-top" style="font-size:12px;color:#1e7e34;font-weight:600"></span>
+      <button id="btn-autofill-all" onclick="autoFillAllGrades()" style="background:linear-gradient(135deg,#7c3aed,#1a5fa8);color:#fff;border:none;border-radius:8px;padding:7px 16px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap" title="กรอกคะแนนอัตโนมัติครบทุกครู ทุกวิชา ทุกห้อง">🤖 กรอกคะแนนอัตโนมัติ (ทุกวิชา)</button>
+      <button id="btn-clear-scores" onclick="openClearModal()" style="background:linear-gradient(135deg,#c0392b,#e74c3c);color:#fff;border:none;border-radius:8px;padding:7px 16px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap" title="ลบคะแนนที่กรอกแล้ว">🗑 ลบคะแนน</button>
     </div>
   </div>
   <div id="gr-main" style="flex:1;margin-top:8px;overflow-y:auto;min-height:0"><div class="eh">กรุณาเลือกครูผู้สอน และวิชา/ห้อง</div></div>
+
+<!-- Auto-fill Modal -->
+<div id="autofill-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;padding:1.6rem 1.8rem;width:580px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 16px 50px rgba(0,0,0,.35)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <div style="font-size:17px;font-weight:700;color:#1a2744">🤖 กรอกคะแนนอัตโนมัติ</div>
+      <button onclick="document.getElementById('autofill-modal').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#888">✕</button>
+    </div>
+    <div id="af-info-box" style="background:#ede7f6;border:1px solid #ce93d8;border-radius:10px;padding:12px 14px;font-size:12px;color:#4a1d96;margin-bottom:14px;line-height:1.8">
+      <strong>📋 ระบบจะกรอกคะแนนครบทุกครู ทุกวิชา ทุกห้อง</strong>
+    </div>
+
+    <!-- เกณฑ์คะแนนตามห้อง -->
+    <div style="background:#f0f7ff;border:1px solid #90caf9;border-radius:10px;padding:10px 14px;font-size:12px;color:#1a2744;margin-bottom:14px;line-height:2">
+      <div style="font-weight:700;margin-bottom:4px">📊 เกณฑ์ขั้นต่ำตามห้อง (ทุกคนมีโอกาสได้คะแนนสูง)</div>
+      <div style="display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:2px 10px;font-size:11px">
+        <span style="font-weight:700;color:#555">ห้อง</span><span style="font-weight:700;color:#555">ก่อน/หลังกลาง</span><span style="font-weight:700;color:#555">กลางภาค</span><span style="font-weight:700;color:#555">ปลายภาค</span>
+        <span>1–4</span><span>≥ 80%</span><span>อิสระ</span><span>≥ 35%</span>
+        <span>5–7</span><span>≥ 70%</span><span>อิสระ</span><span>≥ 25%</span>
+        <span>8–12</span><span>≥ 60%</span><span>อิสระ</span><span>≥ 20%</span>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px">
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:4px">จำนวนคอลัมน์ pre/post</label>
+        <select id="af-numcols" style="width:100%">
+          <option value="1">1 คอลัมน์</option>
+          <option value="2" selected>2 คอลัมน์</option>
+          <option value="3">3 คอลัมน์</option>
+          <option value="4">4 คอลัมน์</option>
+          <option value="5">5 คอลัมน์</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:4px">ข้ามวิชาที่มีคะแนนแล้ว</label>
+        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:13px;margin-top:6px">
+          <input type="checkbox" id="af-skip-filled" checked style="width:16px;height:16px"/>
+          <span>ข้ามห้องที่กรอกแล้ว</span>
+        </label>
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:4px">กรอกเฉพาะ</label>
+        <select id="af-section" style="width:100%">
+          <option value="all">ทุกส่วน</option>
+          <option value="pre">ก่อนกลางภาค</option>
+          <option value="mid">กลางภาค</option>
+          <option value="post">หลังกลางภาค</option>
+          <option value="final">ปลายภาค</option>
+        </select>
+      </div>
+    </div>
+    <!-- วิชาแนะแนว -->
+    <div id="af-guidance-box" style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 14px;font-size:12px;margin-bottom:14px">
+      <div style="font-weight:700;color:#1e7e34;margin-bottom:8px">📝 วิชาแนะแนว (รหัสขึ้นต้น ก)</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+        <span style="color:#555;font-size:12px">ค่าเริ่มต้นทุกห้อง:</span>
+        <label style="cursor:pointer;display:inline-flex;align-items:center;gap:4px"><input type="radio" name="af-guid-default" value="ผ" checked> <strong style="color:#1e7e34">ผ</strong> ทั้งหมด</label>
+        <label style="cursor:pointer;display:inline-flex;align-items:center;gap:4px"><input type="radio" name="af-guid-default" value="มผ"> <strong style="color:#c0392b">มผ</strong> ทั้งหมด</label>
+        <label style="cursor:pointer;display:inline-flex;align-items:center;gap:4px"><input type="radio" name="af-guid-default" value="คละ"> <span style="color:#555">คละ (สุ่ม ผ/มผ)</span></label>
+        <label style="cursor:pointer;display:inline-flex;align-items:center;gap:4px"><input type="radio" name="af-guid-default" value="ข้าม"> <span style="color:#888">ข้ามวิชาแนะแนว</span></label>
+      </div>
+      <div id="af-guid-room-overrides" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      <div style="font-size:11px;color:#888;margin-top:6px">💡 กดปุ่มระดับ/ห้องเพื่อตั้งค่าเฉพาะห้องนั้น</div>
+    </div>
+
+    <div id="af-progress" style="display:none;margin-bottom:12px">
+      <div style="font-size:12px;color:#555;margin-bottom:4px" id="af-progress-label">กำลังประมวลผล...</div>
+      <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden">
+        <div id="af-progress-bar" style="height:100%;background:linear-gradient(90deg,#7c3aed,#1a5fa8);border-radius:4px;width:0%;transition:width .2s"></div>
+      </div>
+    </div>
+    <div id="af-result" style="font-size:12px;color:#1e7e34;font-weight:600;margin-bottom:10px;min-height:20px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+      <button onclick="document.getElementById('autofill-modal').style.display='none'" style="padding:9px 20px;border:1px solid #dde;border-radius:8px;background:#f5f5f5;font-size:13px;cursor:pointer">ปิด</button>
+      <button id="btn-af-save" onclick="saveAll();this.textContent='✅ บันทึกแล้ว!';this.style.background='#1e7e34';setTimeout(()=>{this.textContent='💾 บันทึกข้อมูล';this.style.background='#1e7e34';},2000);" style="display:none;padding:9px 24px;background:#1e7e34;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">💾 บันทึกข้อมูล</button>
+      <button id="btn-af-run" onclick="runAutoFill()" style="padding:9px 24px;background:linear-gradient(135deg,#7c3aed,#1a5fa8);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🚀 เริ่มกรอกคะแนน</button>
+    </div>
+  </div>
 </div>
+
+<!-- Clear Scores Modal -->
+<div id="clear-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;padding:1.6rem 1.8rem;width:580px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 16px 50px rgba(0,0,0,.35)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <div style="font-size:17px;font-weight:700;color:#c0392b">🗑 ลบคะแนน</div>
+      <button onclick="document.getElementById('clear-modal').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#888">✕</button>
+    </div>
+    <div style="background:#fff5f5;border:1px solid #f5c6c6;border-radius:10px;padding:12px 14px;font-size:12px;color:#c0392b;margin-bottom:14px;line-height:1.8">
+      ⚠️ <strong>คำเตือน:</strong> การลบคะแนนไม่สามารถย้อนกลับได้ กรุณาสำรองข้อมูลก่อน
+    </div>
+
+    <!-- เลือกโหมด -->
+    <div style="margin-bottom:14px">
+      <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:8px">ขอบเขตการลบ</label>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <label style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:10px 12px;border:2px solid #eee;border-radius:8px;font-size:13px;transition:border-color .15s" id="cr-mode-all-lbl">
+          <input type="radio" name="cr-mode" id="cr-mode-all" value="all" checked style="accent-color:#c0392b"/>
+          <span><strong>ลบทั้งหมด</strong> — ลบคะแนนทุกวิชาทุกห้อง (ตามสิทธิ์ของคุณ)</span>
+        </label>
+        <label style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:10px 12px;border:2px solid #eee;border-radius:8px;font-size:13px;transition:border-color .15s" id="cr-mode-sj-lbl">
+          <input type="radio" name="cr-mode" id="cr-mode-sj" value="subject" style="accent-color:#c0392b"/>
+          <span><strong>เลือกวิชา</strong> — เลือกวิชาที่ต้องการลบ</span>
+        </label>
+        <label style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:10px 12px;border:2px solid #eee;border-radius:8px;font-size:13px;transition:border-color .15s" id="cr-mode-room-lbl">
+          <input type="radio" name="cr-mode" id="cr-mode-room" value="room" style="accent-color:#c0392b"/>
+          <span><strong>เลือกห้อง</strong> — เลือกห้องที่ต้องการลบ (ทุกวิชาในห้องนั้น)</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- เลือกวิชา (แสดงเมื่อ mode=subject) -->
+    <div id="cr-sj-panel" style="display:none;margin-bottom:14px">
+      <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:6px">เลือกวิชา</label>
+      <div id="cr-sj-list" style="display:flex;flex-direction:column;gap:5px;max-height:200px;overflow-y:auto;border:1px solid #eee;border-radius:8px;padding:8px"></div>
+      <div style="margin-top:6px;display:flex;gap:8px">
+        <button onclick="crSelectAll(true)" style="font-size:11px;padding:3px 10px;border:1px solid #dde;border-radius:5px;background:#f5f5f5;cursor:pointer">เลือกทั้งหมด</button>
+        <button onclick="crSelectAll(false)" style="font-size:11px;padding:3px 10px;border:1px solid #dde;border-radius:5px;background:#f5f5f5;cursor:pointer">ยกเลิกทั้งหมด</button>
+      </div>
+    </div>
+
+    <!-- เลือกห้อง (แสดงเมื่อ mode=room) -->
+    <div id="cr-room-panel" style="display:none;margin-bottom:14px">
+      <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:6px">เลือกห้อง</label>
+      <div id="cr-room-list" style="display:flex;flex-wrap:wrap;gap:6px;border:1px solid #eee;border-radius:8px;padding:8px;max-height:180px;overflow-y:auto"></div>
+      <div style="margin-top:6px;display:flex;gap:8px">
+        <button onclick="crSelectAllRooms(true)" style="font-size:11px;padding:3px 10px;border:1px solid #dde;border-radius:5px;background:#f5f5f5;cursor:pointer">เลือกทั้งหมด</button>
+        <button onclick="crSelectAllRooms(false)" style="font-size:11px;padding:3px 10px;border:1px solid #dde;border-radius:5px;background:#f5f5f5;cursor:pointer">ยกเลิกทั้งหมด</button>
+      </div>
+    </div>
+
+    <!-- ลบเฉพาะส่วน -->
+    <div style="margin-bottom:14px">
+      <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:6px">ลบเฉพาะส่วน</label>
+      <select id="cr-section" style="width:100%">
+        <option value="all">ทุกส่วน (pre+mid+post+final)</option>
+        <option value="pre">ก่อนกลางภาคเท่านั้น</option>
+        <option value="mid">กลางภาคเท่านั้น</option>
+        <option value="post">หลังกลางภาคเท่านั้น</option>
+        <option value="final">ปลายภาคเท่านั้น</option>
+      </select>
+    </div>
+
+    <div id="cr-result" style="font-size:12px;font-weight:600;margin-bottom:10px;min-height:20px"></div>
+
+    <!-- ยืนยัน -->
+    <div id="cr-confirm-box" style="display:none;background:#fff5f5;border:2px solid #e74c3c;border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:13px;color:#c0392b;text-align:center">
+      <div style="font-size:15px;font-weight:700;margin-bottom:6px">⚠️ ยืนยันการลบ</div>
+      <div id="cr-confirm-desc" style="margin-bottom:10px;color:#333;font-size:12px"></div>
+      <div style="display:flex;gap:8px;justify-content:center">
+        <button onclick="document.getElementById('cr-confirm-box').style.display='none'" style="padding:7px 18px;border:1px solid #dde;border-radius:7px;background:#f5f5f5;font-size:13px;cursor:pointer">ยกเลิก</button>
+        <button id="btn-cr-confirm" onclick="runClearScores()" style="padding:7px 20px;background:#c0392b;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer">🗑 ยืนยันลบ</button>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button onclick="document.getElementById('clear-modal').style.display='none'" style="padding:9px 20px;border:1px solid #dde;border-radius:8px;background:#f5f5f5;font-size:13px;cursor:pointer">ปิด</button>
+      <button id="btn-cr-delete" onclick="askClearConfirm()" style="padding:9px 24px;background:#c0392b;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🗑 ลบคะแนนที่เลือก</button>
+    </div>
+  </div>
+</div>
+<!-- /clear-modal -->
+</div><!-- /pg-grades -->
 
 <div class="pg" id="pg-gpa">
   <div class="ph"><div class="pt">ผลการเรียน GPA</div>
@@ -525,7 +691,7 @@ label.rm-chk-item:has(input:checked){background:#e3f2fd;border-color:#90caf9;col
   <div class="tb no-print">
     <select id="gpal"><option value="">ทุกระดับ</option></select>
     <select id="gpar"><option value="">ทุกห้อง</option></select>
-    <select id="gpas"><option value="name">เรียงชื่อ</option><option value="gd">GPA ↓</option><option value="ga">GPA ↑</option><option value="rank">ลำดับที่ในห้อง</option></select>
+    <select id="gpas"><option value="name">เรียงชื่อ</option><option value="gd">GPAX สะสม ↓</option><option value="ga">GPAX สะสม ↑</option><option value="rank">ลำดับที่ในห้อง</option></select>
   </div>
   <div id="gpa-summary" style="font-size:12px;color:#666;margin-bottom:8px;display:flex;gap:16px;flex-wrap:wrap"></div>
   <table><thead><tr id="gpa-hd"></tr></thead><tbody id="gpa-tb"></tbody></table>
@@ -1360,7 +1526,7 @@ function genRoomNames(count){
 const SK='sgs_v9';
 const USK='sgs_v9_users'; // users แยก key เพื่อ sync แยก
 const LV=['ม.1','ม.2','ม.3','ม.4','ม.5','ม.6'];
-const DEF_W={pre:20,mid:30,midMax:100,post:20,final:30,finalMax:100};
+const DEF_W={pre:20,mid:30,midMax:30,post:20,final:30,finalMax:30};
 
 function mkBase(){
   const classes=[];
@@ -1531,10 +1697,12 @@ function getTeachers(){
 
 // weights ของวิชา (fallback global)
 function getW(sjId){
-  if(!sjId)return D.weights;
-  const sj=getSj(sjId);
-  if(sj&&sj.weights)return sj.weights;
-  return D.weights;
+  const sj=sjId?getSj(sjId):null;
+  const base=(sj&&sj.weights)?sj.weights:D.weights;
+  // normalize: midMax/finalMax เสมอเท่ากับ mid/final เพื่อให้กรอกคะแนนเต็มตรงๆ
+  base.midMax=base.mid;
+  base.finalMax=base.final;
+  return base;
 }
 
 function getGI(pct){
@@ -1591,8 +1759,8 @@ function secScore(rec,sec,sjId){
       const effTot=rec.midRetake?mx/2:tot;
       return effTot/mx*W.mid;
     }
-    // แบบช่องเดียว — ใช้ rec.midMax ที่บันทึกไว้ก่อน fallback W.midMax แล้วจึง 100
-    const mx=rec.midMax||W.midMax||100;
+    // แบบช่องเดียว — ใช้ rec.midMax ที่บันทึกไว้ก่อน fallback W.midMax แล้วจึง W.mid
+    const mx=rec.midMax||W.midMax||W.mid||1;
     const rawMid=rec.midRetake?mx/2:(parseFloat(rec.mid)||0);
     return rawMid/mx*W.mid;
   }
@@ -1601,13 +1769,15 @@ function secScore(rec,sec,sjId){
     return rec.postCols.reduce((s,c,i)=>s+(parseFloat(rec.postScores[i])||0),0)/mx*W.post;
   }
   if(sec==='final'){
-    // ถ้ามีช่องย่อย ให้ใช้ผลรวมคะแนนเต็มของช่องย่อยเป็นตัวหาร (เหมือน mid)
+    // ถ้ามีช่องย่อย ให้ใช้ finalScores (เหมือน midScores)
     const hasFinalCols=W.finalCols&&W.finalCols.length>0;
     if(hasFinalCols){
+      const fSc=rec.finalScores||{};
+      const tot=W.finalCols.reduce((s,_,i)=>s+(parseFloat(fSc[i])||0),0);
       const mx=W.finalCols.reduce((s,c)=>s+(c.m||0),0)||1;
-      return (parseFloat(rec.final)||0)/mx*W.final;
+      return tot/mx*W.final;
     }
-    const mx=W.finalMax||100;
+    const mx=W.finalMax||W.final||1;
     return (parseFloat(rec.final)||0)/mx*W.final;
   }
   return 0;
@@ -1635,37 +1805,58 @@ function gradeResult(rec,sjId){
 // GPA ถ่วงน้ำหนักหน่วยกิต
 function getGPA(sid){
   let pts=0,cred=0;
-  // deduplicate by code: same subject code = same credit, pick first available record
+  // deduplicate by code: same subject code = same credit, pick the record that actually has a score
   const _seen=new Set();
+  // Group sjs by code to find the best record per code
+  const _byCode={};
   getSjs().forEach(sj=>{
     if(sj.code&&sj.code.startsWith('ก'))return;
-    if(_seen.has(sj.code))return;
-    const rec=getRec(sid,sj.id);if(!rec)return;
-    _seen.add(sj.code);
-    const gr=gradeResult(rec,sj.id);
-    if(gr&&gr!=='RO'&&gr.grade){const cr=parseFloat(sj.credit)||1;pts+=parseFloat(gr.grade)*cr;cred+=cr;}
+    if(!_byCode[sj.code])_byCode[sj.code]=[];
+    _byCode[sj.code].push(sj);
+  });
+  Object.entries(_byCode).forEach(([code,sjList])=>{
+    // หาวิชาที่นักเรียนคนนี้มีคะแนนจริง (hasAnyScore)
+    let bestRec=null,bestSj=null;
+    for(const sj of sjList){
+      const rec=getRec(sid,sj.id);
+      if(rec&&hasAnyScore(rec)){bestRec=rec;bestSj=sj;break;}
+    }
+    if(!bestRec)return; // นักเรียนไม่มีคะแนนในวิชานี้เลย → ไม่นับ
+    const gr=gradeResult(bestRec,bestSj.id);
+    if(gr&&gr!=='RO'&&gr.grade){const cr=parseFloat(bestSj.credit)||1;pts+=parseFloat(gr.grade)*cr;cred+=cr;}
   });
   return cred>0?(pts/cred).toFixed(2):'-';
 }
 function gpaColor(g){const n=parseFloat(g);return isNaN(n)?'#888':n>=3.5?'#1e7e34':n>=2.5?'#1a5fa8':n>=1.0?'#856404':'#c0392b';}
 
 // เกรดเฉลี่ยสะสม (GPAX) — คำนวณจากทุกปี ทุกภาค dedup by code ต่อปี/ภาค
-// lvRange: null=ทั้งหมด, 'junior'=ม.1-3, 'senior'=ม.4-6
+// lvRange: null=อัตโนมัติ (แยก ม.ต้น/ม.ปลาย ตามระดับปัจจุบัน), 'junior'=ม.1-3, 'senior'=ม.4-6, 'all'=ทั้งหมด
+//
+// หลักการ: นักเรียน ม.ต้น → GPAX เฉพาะปีที่เรียน ม.1-3 (6 เทอม)
+//           นักเรียน ม.ปลาย → GPAX เฉพาะปีที่เรียน ม.4-6 (ขึ้นใหม่)
+//           ใช้ level จาก D._students[yr] ของปีนั้น ๆ ไม่ใช่ level ปัจจุบัน
 function getGPAX(sid,lvRange){
   const stu=D.students.find(s=>s.id===sid);
+  const JUNIOR=['ม.1','ม.2','ม.3'];
+  const SENIOR=['ม.4','ม.5','ม.6'];
+  const curLevel=stu?stu.level:'';
+  const effectiveRange=lvRange==='all'?null:lvRange?lvRange:(JUNIOR.includes(curLevel)?'junior':SENIOR.includes(curLevel)?'senior':null);
   let pts=0,cred=0;
   const _seen=new Set();
   Object.entries(D.grades||{}).forEach(([yr,terms])=>{
     Object.entries(terms||{}).forEach(([tm,subjects])=>{
       const sjs=(D.subjectMap[yr]&&D.subjectMap[yr][tm])||[];
+      // ดึง level ของนักเรียนในปีนั้น ๆ
+      const stuInYear=D._students&&D._students[yr]?D._students[yr].find(s=>s.id===sid):null;
+      const levelInYear=stuInYear?stuInYear.level:(stu?stu.level:'');
       Object.entries(subjects||{}).forEach(([sjId,stuGrades])=>{
         const rec=stuGrades[sid];if(!rec||!hasAnyScore(rec))return;
         const sj=sjs.find(s=>s.id===sjId);if(!sj)return;
         if(sj.code&&sj.code.startsWith('ก'))return;
-        if(lvRange&&stu){
-          const isJunior=['ม.1','ม.2','ม.3'].includes(stu.level);
-          if(lvRange==='junior'&&!isJunior)return;
-          if(lvRange==='senior'&&isJunior)return;
+        if(effectiveRange){
+          const isJuniorYear=JUNIOR.includes(levelInYear);
+          if(effectiveRange==='junior'&&!isJuniorYear)return;
+          if(effectiveRange==='senior'&&isJuniorYear)return;
         }
         const key=yr+'|'+tm+'|'+sj.code;
         if(_seen.has(key))return;
@@ -1680,6 +1871,12 @@ function getGPAX(sid,lvRange){
     });
   });
   return cred>0?(pts/cred).toFixed(2):'-';
+}
+// label ของ GPAX ตามระดับนักเรียน
+function getGPAXLabel(sid){
+  const stu=D.students.find(s=>s.id===sid);
+  if(!stu)return'GPAX สะสม';
+  return['ม.1','ม.2','ม.3'].includes(stu.level)?'GPAX ม.ต้น':'GPAX ม.ปลาย';
 }
 function getRooms(lv){return D.classes.filter(c=>c.level===lv).map(c=>c.room).sort((a,b)=>+a-+b);}
 function getClassObj(lv,rm){return D.classes.find(c=>c.level===lv&&c.room===rm)||null;}
@@ -2153,8 +2350,7 @@ function renderGrBody(sjId,stus){
     const KEY=isFin?'final':'mid';
     const RK=isFin?'finalRO':'midRO';
     const wPct=isFin?W.final:W.mid;
-    const wMax=isFin?(W.finalMax||100):(W.midMax||100);
-    const colsKey=isFin?'midCols':'midCols'; // placeholder, set below
+    const wMax=isFin?(W.finalMax||W.final):(W.midMax||W.mid);
     const realColsKey=isFin?'finalCols':'midCols';
     const realScKey=isFin?'finalScores':'midScores';
     // ตรวจว่ามี cols ใน W (วิชานี้) ไหม
@@ -2170,7 +2366,7 @@ function renderGrBody(sjId,stus){
     body.innerHTML=`
       <div style="margin:1rem 0 .8rem;font-size:13px;background:${bgColor};border:1px solid ${bdColor};border-radius:8px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
         <div><strong>${secLabel}</strong> — สัดส่วน <strong>${wPct}%</strong>
-          <span style="font-size:11px;color:#888;margin-left:8px">${hasExamCols?'แบบหลายช่อง':'กรอกคะแนนรวม สูตร: (คะแนน ÷ '+wMax+') × '+wPct}</span>
+          <span style="font-size:11px;color:#888;margin-left:8px">${hasExamCols?'แบบหลายช่อง':`กรอกคะแนนเต็ม ${wMax} ได้เลย`}</span>
         </div>
         <div style="display:flex;gap:6px;align-items:center">
           ${hasExamCols?`<button id="btn-rm-exam-col" style="padding:4px 10px;font-size:12px;background:#ffebee;border:1px solid #ef9a9a;color:#1a1a1a;border-radius:6px;cursor:pointer">− ลบช่องสุดท้าย</button>`:''}
@@ -2180,11 +2376,23 @@ function renderGrBody(sjId,stus){
       </div>
       ${hasExamCols?
         // แบบหลายช่อง
-        `<div style="overflow-x:auto"><table>
+        `<div class="fc no-print" style="margin:8px 0 6px">
+          <div style="font-size:12px;font-weight:600;color:#555;margin-bottom:6px">คอลัมน์คะแนน${isFin?'ปลายภาค':'กลางภาค'} (สัดส่วน ${wPct}%)</div>
+          <div id="col-mgr-exam" style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:7px">
+            ${examCols.map((col,ci)=>`
+              <div style="display:inline-flex;align-items:center;gap:4px;background:#fff;border:1px solid #dde;border-radius:8px;padding:5px 8px">
+                <input class="col-h-name" type="text" value="${col.n}" data-ci="${ci}" data-sec="${grSec}" data-sjid="${sjId}" style="width:60px;border:1px solid #eee;border-radius:4px;padding:2px 5px;font-size:12px" placeholder="ชื่อ"/>
+                <span style="color:#aaa;font-size:11px">/</span>
+                <input class="col-h-max" type="number" value="${col.m}" min="1" data-ci="${ci}" data-sec="${grSec}" data-sjid="${sjId}" style="width:48px;border:1px solid #eee;border-radius:4px;padding:2px 4px;font-size:12px;text-align:center"/>
+              </div>`).join('')}
+          </div>
+          <div style="font-size:11px;color:#888">รวมคะแนนเต็ม: <strong>${examCols.reduce((s,c)=>s+(c.m||0),0)}</strong></div>
+        </div>
+        <div style="overflow-x:auto"><table>
           <thead><tr>
             <th>ที่</th><th>รหัส</th><th>ชื่อ-สกุล</th>
-            ${examCols.map((col,ci)=>`<th style="text-align:center;min-width:70px"><input class="col-h-name" type="text" value="${col.n}" data-ci="${ci}" data-sec="${grSec}" data-sjid="${sjId}" style="width:60px;text-align:center;border:1px solid #dde;border-radius:4px;padding:2px 4px;font-size:11px"/><br><small>/<input class="col-h-max" type="number" value="${col.m}" min="1" data-ci="${ci}" data-sec="${grSec}" data-sjid="${sjId}" style="width:44px;text-align:center;border:1px solid #dde;border-radius:4px;padding:1px 3px;font-size:11px"/></small></th>`).join('')}
-            <th style="text-align:center">รวม/${examCols.reduce((s,c)=>s+(c.m||0),0)}</th>
+            ${examCols.map((col,ci)=>`<th style="text-align:center;min-width:70px">${col.n}<br><small style="font-weight:400;color:#888">/${col.m}</small></th>`).join('')}
+            <th class="exam-tot-hd" style="text-align:center">รวม/${examCols.reduce((s,c)=>s+(c.m||0),0)}</th>
             ${!isFin?`<th title="แก้ตัว: คะแนนต่ำกว่าครึ่ง สามารถแก้ตัวได้ คะแนนจะถูก cap ที่ครึ่งเต็ม" style="white-space:nowrap">แก้ตัว</th>`:''}
             <th>ร</th>
           </tr></thead>
@@ -2251,7 +2459,11 @@ function renderGrBody(sjId,stus){
     const realCKey=isFin?'finalCols':'midCols';
     if(btnAddCol){btnAddCol.onclick=()=>{
       if(!W[realCKey])W[realCKey]=[];
-      W[realCKey].push({n:'ช่อง'+(W[realCKey].length+1),m:10});
+      const wTotal=isFin?(W.final||30):(W.mid||30);
+      const newLen=W[realCKey].length+1;
+      const perCol=Math.round(wTotal/newLen*10)/10;
+      W[realCKey].forEach(c=>c.m=perCol);
+      W[realCKey].push({n:'ช่อง'+newLen,m:perCol});
       renderGrBody(sjId,stus);
     };}
     if(btnRmCol){btnRmCol.onclick=()=>{
@@ -2323,7 +2535,7 @@ function renderGrBody(sjId,stus){
         if(W[realCKey]&&W[realCKey][ci])W[realCKey][ci].m=v;
         body.querySelectorAll(`.exam-col-inp[data-ci="${ci}"]`).forEach(si=>{si.dataset.max=v;si.max=v;});
         const newTotal=W[realCKey].reduce((s,c)=>s+(c.m||0),0);
-        const totTh=body.querySelector('thead tr th:nth-last-child(2)');
+        const totTh=body.querySelector('th.exam-tot-hd');
         if(totTh)totTh.textContent='รวม/'+newTotal;
         saveAll();
       };
@@ -2579,10 +2791,22 @@ function _calcRoomRanks(stuList){
   }
   return map;
 }
-// คำนวณลำดับ dense rank ในระดับ (ใช้ GPAX สะสม)
-function _calcLevelRanks(lv){
+// ลำดับในระดับ — ใช้ GPA เทอมนี้ (สำหรับ ปพ.6)
+function _calcLevelRanksByGPA(lv){
   const stuList=D.students.filter(s=>s.level===lv);
   const withGPA=stuList.map(s=>({id:s.id,g:parseFloat(getGPA(s.id))})).filter(x=>!isNaN(x.g));
+  withGPA.sort((a,b)=>b.g-a.g);
+  const map={};let cur=1;
+  for(let i=0;i<withGPA.length;i++){
+    if(i>0&&withGPA[i].g!==withGPA[i-1].g)cur=i+1;
+    map[withGPA[i].id]=cur;
+  }
+  return map;
+}
+// ลำดับในระดับ — ใช้ GPAX สะสม (สำหรับหน้าผลการเรียน GPA)
+function _calcLevelRanksByGPAX(lv){
+  const stuList=D.students.filter(s=>s.level===lv);
+  const withGPA=stuList.map(s=>({id:s.id,g:parseFloat(getGPAX(s.id))})).filter(x=>!isNaN(x.g));
   withGPA.sort((a,b)=>b.g-a.g);
   const map={};let cur=1;
   for(let i=0;i<withGPA.length;i++){
@@ -2624,7 +2848,7 @@ function rGPA(page){
   // rank ระดับ — คำนวณตามระดับที่แสดง
   const _levelRankMap={};
   const _levels=[...new Set(list.map(s=>s.level))];
-  _levels.forEach(rlv=>{const mp=_calcLevelRanks(rlv);Object.assign(_levelRankMap,mp);});
+  _levels.forEach(rlv=>{const mp=_calcLevelRanksByGPAX(rlv);Object.assign(_levelRankMap,mp);});
   // จำนวนนักเรียนในห้องและในระดับ (สำหรับแสดง /N)
   const _roomCount={};
   const _levelCount={};
@@ -2634,16 +2858,26 @@ function rGPA(page){
     _levelCount[s.level]=(_levelCount[s.level]||0)+1;
   });
 
-  if(srt==='gd')list.sort((a,b)=>{const ga=parseFloat(getGPA(a.id));const gb2=parseFloat(getGPA(b.id));const na=isNaN(ga),nb=isNaN(gb2);if(na&&nb)return 0;if(na)return 1;if(nb)return -1;return gb2-ga;});
-  else if(srt==='ga')list.sort((a,b)=>parseFloat(getGPA(a.id)||0)-parseFloat(getGPA(b.id)||0));
+  if(srt==='gd')list.sort((a,b)=>{const ga=parseFloat(getGPAX(a.id));const gb2=parseFloat(getGPAX(b.id));const na=isNaN(ga),nb=isNaN(gb2);if(na&&nb)return 0;if(na)return 1;if(nb)return -1;return gb2-ga;});
+  else if(srt==='ga')list.sort((a,b)=>parseFloat(getGPAX(a.id)||0)-parseFloat(getGPAX(b.id)||0));
   else if(srt==='rank')list.sort((a,b)=>(_roomRankMap[a.id]||999)-(_roomRankMap[b.id]||999));
   else list.sort((a,b)=>a.name.localeCompare(b.name,'th'));
 
-  // GPAX by range removed
+  // จัดกลุ่มสาระ
+  const GRP_LABELS={'กลุ่มสาระภาษาไทย':'ภาษาไทย','กลุ่มสาระคณิตศาสตร์':'คณิตศาสตร์',
+    'กลุ่มสาระวิทยาศาสตร์และเทคโนโลยี':'วิทย์/เทคโน','กลุ่มสาระสังคมศึกษา ศาสนาและวัฒนธรรม':'สังคมฯ',
+    'กลุ่มสาระภาษาต่างประเทศ':'ภาษาต่างประเทศ','กลุ่มสาระศิลปะ':'ศิลปะ',
+    'กลุ่มสาระสุขศึกษาและพลศึกษา':'สุขศึกษา/พลศึกษา','กลุ่มสาระการงานอาชีพ':'การงานอาชีพ','แนะแนว':'แนะแนว'};
+  const GRP_ORDER=Object.keys(GRP_LABELS);
+  // หากลุ่มที่มีวิชาลงทะเบียนจริง
+  const activeGroups=GRP_ORDER.filter(g=>sjs.some(sj=>sj.group===g));
+  // วิชาไม่มีกลุ่ม → กลุ่ม "อื่นๆ"
+  const hasOther=sjs.some(sj=>!sj.group||!GRP_ORDER.includes(sj.group));
+  const allGroups=activeGroups.concat(hasOther?['อื่นๆ']:[]);
+
   document.getElementById('gpa-hd').innerHTML=
     '<th>ที่</th><th>รหัส</th><th>ชื่อ-สกุล</th><th>ระดับ</th><th>ห้อง</th>'
-    +sjs.map(function(sj){return '<th style="font-size:11px;white-space:nowrap" title="'+sj.name+'">['+sj.code+']<br><small style="font-weight:400;color:#888">'+(sj.name.length>8?sj.name.slice(0,8)+'…':sj.name)+'</small></th>';}).join('')
-    +'<th>GPA<br><small style="font-weight:400;font-size:10px">ภาคนี้</small></th>'
+    +allGroups.map(g=>'<th style="font-size:11px;white-space:nowrap" title="'+g+'"><small>'+(GRP_LABELS[g]||g)+'</small></th>').join('')
     +'<th style="font-size:11px">GPAX<br><small style="font-weight:400;font-size:10px">สะสม</small></th>'
     +'<th style="font-size:11px">ลำดับ<br>ในห้อง</th><th style="font-size:11px">ลำดับ<br>ในระดับ</th><th>ผล</th>';
   // summary
@@ -2657,13 +2891,22 @@ function rGPA(page){
     const lRank=_levelRankMap[s.id]||'–';
     const rTotal=_roomCount[s.level+'/'+s.room]||'?';
     const lTotal=_levelCount[s.level]||'?';
-    const _grCells=sjs.map(function(sj){
-      const _sjsForCode=_allSjs.filter(x=>x.code===sj.code);
-      let rec=null,grResult=null;
-      for(const _sj of _sjsForCode){const r=getRec(s.id,_sj.id);if(r&&hasAnyScore(r)){rec=r;grResult=gradeResult(r,_sj.id);break;}}
-      if(!rec)return'<td style="color:#ccc">–</td>';
-      const gr=grResult;
-      return gr==='RO'?'<td><strong style="color:#1a1a1a">ร</strong></td>':gr?'<td><strong>'+gr.label+'</strong></td>':'<td style="color:#ccc">–</td>';
+    // เฉลี่ยเกรดแต่ละกลุ่มสาระ
+    const _grCells=allGroups.map(function(grp){
+      const grpSjs=sjs.filter(sj=>(grp==='อื่นๆ'?(!sj.group||!GRP_ORDER.includes(sj.group)):sj.group===grp));
+      let pts=0,cnt=0,hasRO=false;
+      grpSjs.forEach(function(sj){
+        const _sjsForCode=_allSjs.filter(x=>x.code===sj.code);
+        let rec=null,grResult=null;
+        for(const _sj of _sjsForCode){const r=getRec(s.id,_sj.id);if(r&&hasAnyScore(r)){rec=r;grResult=gradeResult(r,_sj.id);break;}}
+        if(!rec)return;
+        if(grResult==='RO'){hasRO=true;return;}
+        if(grResult&&grResult.grade!=null){pts+=parseFloat(grResult.grade);cnt++;}
+      });
+      if(cnt===0&&!hasRO)return'<td style="color:#ccc">–</td>';
+      if(cnt===0&&hasRO)return'<td><strong style="color:#1a1a1a">ร</strong></td>';
+      const avg=(pts/cnt).toFixed(2);
+      return'<td style="text-align:center;font-weight:700;color:'+gpaColor(avg)+'">'+avg+'</td>';
     }).join('');
     const _jCell='';
     const _sCell='';
@@ -2674,11 +2917,10 @@ function rGPA(page){
       +'<td style="color:#ccc;font-size:11px">'+((page-1)*PER+i+1)+'</td><td style="color:#888;font-size:11px">'+s.id+'</td>'
       +'<td style="font-weight:600">'+s.name+'</td><td>'+s.level+'</td><td>'+s.room+'</td>'
       +_grCells
-      +'<td style="font-weight:700;color:'+gpaColor(g)+'">'+g+'</td>'
       +'<td style="font-weight:700;color:'+gpaColor(gpax)+';text-align:center">'+gpax+'</td>'
       +'<td style="text-align:center;font-weight:700;color:#1a1a1a">'+_rRankCell+'</td>'
       +'<td style="text-align:center;font-weight:700;color:#1a1a1a">'+_lRankCell+'</td>'
-      +'<td>'+(g==='-'?'–':parseFloat(g)>=1.0?'<span class="bx bxp">ผ่าน</span>':'<span class="bx bxf">ไม่ผ่าน</span>')+'</td>'
+      +'<td>'+(gpax==='-'?'–':parseFloat(gpax)>=1.0?'<span class="bx bxp">ผ่าน</span>':'<span class="bx bxf">ไม่ผ่าน</span>')+'</td>'
       +'</tr>';
   }).join('');
   mkPgr('gpa-pg',page,list.length,PER,rGPA);
@@ -2697,27 +2939,49 @@ function _buildGPAPrintHTML(){
   _rooms.forEach(rv=>{const [rlv,rrm]=rv.split('/');const stuInRoom=D.students.filter(s=>s.level===rlv&&s.room===rrm);const rmap=_calcRoomRanks(stuInRoom);Object.assign(_roomRankMap,rmap);});
   const _levelRankMap={};
   const _levels=[...new Set(list.map(s=>s.level))];
-  _levels.forEach(rlv=>{const mp=_calcLevelRanks(rlv);Object.assign(_levelRankMap,mp);});
+  _levels.forEach(rlv=>{const mp=_calcLevelRanksByGPAX(rlv);Object.assign(_levelRankMap,mp);});
   const _roomCount={};const _levelCount={};
   D.students.forEach(s=>{const rk=s.level+'/'+s.room;_roomCount[rk]=(_roomCount[rk]||0)+1;_levelCount[s.level]=(_levelCount[s.level]||0)+1;});
-  if(srt==='gd')list.sort((a,b)=>{const ga=parseFloat(getGPA(a.id));const gb2=parseFloat(getGPA(b.id));const na=isNaN(ga),nb=isNaN(gb2);if(na&&nb)return 0;if(na)return 1;if(nb)return -1;return gb2-ga;});
-  else if(srt==='ga')list.sort((a,b)=>parseFloat(getGPA(a.id)||0)-parseFloat(getGPA(b.id)||0));
+  if(srt==='gd')list.sort((a,b)=>{const ga=parseFloat(getGPAX(a.id));const gb2=parseFloat(getGPAX(b.id));const na=isNaN(ga),nb=isNaN(gb2);if(na&&nb)return 0;if(na)return 1;if(nb)return -1;return gb2-ga;});
+  else if(srt==='ga')list.sort((a,b)=>parseFloat(getGPAX(a.id)||0)-parseFloat(getGPAX(b.id)||0));
   else if(srt==='rank')list.sort((a,b)=>(_roomRankMap[a.id]||999)-(_roomRankMap[b.id]||999));
   else list.sort((a,b)=>a.name.localeCompare(b.name,'th'));
-  const thSjs=sjs.map(sj=>`<th style="font-size:10px;white-space:nowrap">[${sj.code}]<br>${sj.name.length>8?sj.name.slice(0,8)+'…':sj.name}</th>`).join('');
+  // จัดกลุ่มสาระ (print)
+  const P_GRP_LABELS={'กลุ่มสาระภาษาไทย':'ภาษาไทย','กลุ่มสาระคณิตศาสตร์':'คณิตฯ',
+    'กลุ่มสาระวิทยาศาสตร์และเทคโนโลยี':'วิทย์/เทคโน','กลุ่มสาระสังคมศึกษา ศาสนาและวัฒนธรรม':'สังคมฯ',
+    'กลุ่มสาระภาษาต่างประเทศ':'ภาษาต่างฯ','กลุ่มสาระศิลปะ':'ศิลปะ',
+    'กลุ่มสาระสุขศึกษาและพลศึกษา':'สุขฯ/พลฯ','กลุ่มสาระการงานอาชีพ':'การงานฯ','แนะแนว':'แนะแนว'};
+  const P_GRP_ORDER=Object.keys(P_GRP_LABELS);
+  const pActiveGroups=P_GRP_ORDER.filter(g=>sjs.some(sj=>sj.group===g));
+  const pHasOther=sjs.some(sj=>!sj.group||!P_GRP_ORDER.includes(sj.group));
+  const pAllGroups=pActiveGroups.concat(pHasOther?['อื่นๆ']:[]);
+  const thSjs=pAllGroups.map(g=>`<th style="font-size:10px;white-space:nowrap">${P_GRP_LABELS[g]||g}</th>`).join('');
   const rows=list.map((s,i)=>{
-    const g=getGPA(s.id);
     const rRank=_roomRankMap[s.id]||'–';const lRank=_levelRankMap[s.id]||'–';
     const rTotal=_roomCount[s.level+'/'+s.room]||'?';const lTotal=_levelCount[s.level]||'?';
+    const grpCells=pAllGroups.map(grp=>{
+      const grpSjs=sjs.filter(sj=>(grp==='อื่นๆ'?(!sj.group||!P_GRP_ORDER.includes(sj.group)):sj.group===grp));
+      let pts=0,cnt=0,hasRO=false;
+      grpSjs.forEach(sj=>{
+        const _sjsForCode=_allSjs.filter(x=>x.code===sj.code);
+        let rec=null,grResult=null;
+        for(const _sj of _sjsForCode){const r=getRec(s.id,_sj.id);if(r&&hasAnyScore(r)){rec=r;grResult=gradeResult(r,_sj.id);break;}}
+        if(!rec)return;
+        if(grResult==='RO'){hasRO=true;return;}
+        if(grResult&&grResult.grade!=null){pts+=parseFloat(grResult.grade);cnt++;}
+      });
+      if(cnt===0&&!hasRO)return'<td>–</td>';
+      if(cnt===0&&hasRO)return'<td><strong>ร</strong></td>';
+      return`<td style="text-align:center;font-weight:700">${(pts/cnt).toFixed(2)}</td>`;
+    }).join('');
     return`<tr>
       <td style="text-align:center">${i+1}</td><td style="font-size:10px">${s.id}</td>
       <td style="font-weight:600">${s.name}</td><td>${s.level}</td><td>${s.room}</td>
-      ${sjs.map(sj=>{const _sjsForCode=_allSjs.filter(x=>x.code===sj.code);let rec=null,grResult=null;for(const _sj of _sjsForCode){const r=getRec(s.id,_sj.id);if(r){rec=r;grResult=gradeResult(r,_sj.id);break;}}if(!rec)return'<td>–</td>';const gr=grResult;return gr==='RO'?'<td><strong style="color:#1a1a1a">ร</strong></td>':gr?`<td><strong>${gr.label}</strong></td>`:'<td>–</td>';}).join('')}
-      <td style="font-weight:700;text-align:center">${g}</td>
+      ${grpCells}
       <td style="font-weight:700;text-align:center">${getGPAX(s.id)}</td>
       <td style="text-align:center;font-weight:700">${rRank}/${rTotal}</td>
       <td style="text-align:center;font-weight:700">${lRank}/${lTotal}</td>
-      <td style="text-align:center">${g==='-'?'–':parseFloat(g)>=1.0?'ผ่าน':'ไม่ผ่าน'}</td>
+      <td style="text-align:center">${getGPAX(s.id)==='-'?'–':parseFloat(getGPAX(s.id))>=1.0?'ผ่าน':'ไม่ผ่าน'}</td>
     </tr>`;
   }).join('');
   return`<div style="padding:1cm;font-family:'Sarabun',sans-serif">
@@ -2727,7 +2991,7 @@ function _buildGPAPrintHTML(){
     <table style="border-collapse:collapse;width:100%;font-size:11px">
       <thead><tr style="background:#1a2744;color:#fff">
         <th style="padding:5px">ที่</th><th>รหัส</th><th>ชื่อ-สกุล</th><th>ระดับ</th><th>ห้อง</th>
-        ${thSjs}<th>GPA</th><th>GPAX</th><th>ลำดับห้อง</th><th>ลำดับระดับ</th><th>ผล</th>
+        ${thSjs}<th>GPAX</th><th>ลำดับห้อง</th><th>ลำดับระดับ</th><th>ผล</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
@@ -2941,8 +3205,8 @@ function rSj(){
         if(inp.classList.contains('sj-wmid'))W.mid=parseFloat(inp.value)||0;
         if(inp.classList.contains('sj-wpost'))W.post=parseFloat(inp.value)||0;
         if(inp.classList.contains('sj-wfinal'))W.final=parseFloat(inp.value)||0;
-        if(inp.classList.contains('sj-wmidmax'))W.midMax=parseFloat(inp.value)||100;
-        if(inp.classList.contains('sj-wfinalmax'))W.finalMax=parseFloat(inp.value)||100;
+        if(inp.classList.contains('sj-wmidmax'))W.midMax=parseFloat(inp.value)||W.mid||0;
+        if(inp.classList.contains('sj-wfinalmax'))W.finalMax=parseFloat(inp.value)||W.final||0;
       });
     });
     // แบ่งช่องย่อย mid/final
@@ -2951,7 +3215,7 @@ function rSj(){
         const sj=getSjs().find(s=>s.id===chk.dataset.id);if(!sj)return;
         if(!sj.weights)sj.weights={...D.weights};
         if(!chk.checked)sj.weights.midCols=[];
-        else if(!sj.weights.midCols||!sj.weights.midCols.length)sj.weights.midCols=[{n:'ช่อง1',m:10}];
+        else if(!sj.weights.midCols||!sj.weights.midCols.length)sj.weights.midCols=[{n:'ช่อง1',m:sj.weights.mid||D.weights.mid||30}];
         rSj();
       });
     });
@@ -2960,7 +3224,7 @@ function rSj(){
         const sj=getSjs().find(s=>s.id===chk.dataset.id);if(!sj)return;
         if(!sj.weights)sj.weights={...D.weights};
         if(!chk.checked)sj.weights.finalCols=[];
-        else if(!sj.weights.finalCols||!sj.weights.finalCols.length)sj.weights.finalCols=[{n:'ช่อง1',m:10}];
+        else if(!sj.weights.finalCols||!sj.weights.finalCols.length)sj.weights.finalCols=[{n:'ช่อง1',m:sj.weights.final||D.weights.final||30}];
         rSj();
       });
     });
@@ -2996,7 +3260,11 @@ function rSj(){
         if(!sj.weights)sj.weights={...D.weights};
         const colKey=btn.dataset.sec==='mid'?'midCols':'finalCols';
         if(!sj.weights[colKey])sj.weights[colKey]=[];
-        sj.weights[colKey].push({n:'ช่อง'+(sj.weights[colKey].length+1),m:10});
+        const wTotal=colKey==='midCols'?(sj.weights.mid||D.weights.mid||30):(sj.weights.final||D.weights.final||30);
+        const newLen=sj.weights[colKey].length+1;
+        const perCol=Math.round(wTotal/newLen*10)/10;
+        sj.weights[colKey].forEach(c=>c.m=perCol);
+        sj.weights[colKey].push({n:'ช่อง'+newLen,m:perCol});
         rSj();
       });
     });
@@ -3748,7 +4016,7 @@ function rSettings(){
       const pct=document.createElement('span');pct.style.cssText='font-size:12px;color:#888';pct.textContent='%';div.appendChild(pct);
       if(r.hasMax){
         const inp2=document.createElement('input');
-        inp2.type='number';inp2.id='w-'+r.k+'max';inp2.value=W[r.k+'Max']||W[r.k]||100;inp2.min=1;
+        inp2.type='number';inp2.id='w-'+r.k+'max';inp2.value=W[r.k+'Max']||W[r.k]||0;inp2.min=1;
         inp2.style.cssText='width:70px;text-align:center;';
         div.appendChild(inp2);
       }
@@ -4621,7 +4889,7 @@ function buildRemedialHTML(){
       }</tr></tbody></table></td>`;
     }
     // single score
-    const wMax=isMid?(W2.midMax||100):(W2.finalMax||100);
+    const wMax=isMid?(W2.midMax||W2.mid):(W2.finalMax||W2.final);
     const val=isMid?(rec.mid??''):(rec.final??'');
     return`<td style="padding:3px 4px${isRO?';background:#f0e8ff':''}">
       ${isRO?`<label style="font-size:10px;color:#1a1a1a;display:block;margin-bottom:2px;white-space:nowrap">
@@ -4757,7 +5025,7 @@ function _secDirect(rec,sec,W){
       const effTot=rec.midRetake?mx/2:tot;
       return effTot/mx*W.mid;
     }
-    const mx2=rec.midMax||W.midMax||100;
+    const mx2=rec.midMax||W.midMax||W.mid||1;
     const rawMid=rec.midRetake?mx2/2:(parseFloat(rec.mid)||0);
     return rawMid/mx2*W.mid;
   }
@@ -4770,7 +5038,7 @@ function _secDirect(rec,sec,W){
       const mx=fCols.reduce((s,col)=>s+(col.m||0),0)||1;
       return tot/mx*W.final;
     }
-    const mx=W.finalMax||100;return(parseFloat(rec.final)||0)/mx*W.final;
+    const mx=W.finalMax||W.final||1;return(parseFloat(rec.final)||0)/mx*W.final;
   }
   return 0;
 }
@@ -6238,7 +6506,51 @@ document.getElementById('mn').addEventListener('click',e=>{
     if(ny&&!D.years.includes(ny)){D.years.push(ny);D.years.sort();}if(ny)CY=ny;
     saveAll();popAll();rSettings();alert('บันทึกเรียบร้อย');return;
   }
-  if(e.target.id==='btn-add-year'){const ny=document.getElementById('new-year').value.trim();if(!ny)return;if(D.years.includes(ny)){alert('มีปีนี้แล้ว');return;}D.years.push(ny);D.years.sort();document.getElementById('new-year').value='';saveAll();rSettings();popAll();return;}
+  if(e.target.id==='btn-add-year'){
+    const ny=document.getElementById('new-year').value.trim();
+    if(!ny)return;
+    if(D.years.includes(ny)){alert('มีปีนี้แล้ว');return;}
+    // ตรวจว่ามีนักเรียนปีก่อน และปีใหม่ > ปีเดิม → เสนอเลื่อนชั้น
+    const prevYear=D.years.length?[...D.years].sort().slice(-1)[0]:'';
+    const hasStudents=prevYear&&D._students&&D._students[prevYear]&&D._students[prevYear].length>0;
+    const isNextYear=prevYear&&parseInt(ny)===parseInt(prevYear)+1;
+    const alreadyHasStudents=D._students&&D._students[ny]&&D._students[ny].length>0;
+    D.years.push(ny);D.years.sort();
+    document.getElementById('new-year').value='';
+    if(hasStudents&&isNextYear&&!alreadyHasStudents){
+      // เสนอเลื่อนชั้นอัตโนมัติ
+      const lvMap={'ม.1':'ม.2','ม.2':'ม.3','ม.3':'ม.4','ม.4':'ม.5','ม.5':'ม.6'};
+      const prevStus=D._students[prevYear];
+      const counts={};Object.keys(lvMap).forEach(lv=>{counts[lv]=(prevStus.filter(s=>s.level===lv).length||0);});
+      const m6=prevStus.filter(s=>s.level==='ม.6').length;
+      const summary=Object.entries(lvMap).map(([f,t])=>f+'→'+t+': '+counts[f]+' คน').join('\n');
+      if(confirm('เพิ่มปี '+ny+' เรียบร้อย\n\nต้องการเลื่อนชั้นนักเรียนจากปี '+prevYear+' → '+ny+' อัตโนมัติด้วยไหม?\n\n'+summary+'\n\n✅ ม.1 ใหม่จะถูกสร้างอัตโนมัติ\n🗑 ม.6 ('+m6+' คน) จะจบการศึกษา')){
+        // เลื่อนชั้น ม.1-5 → ม.2-6
+        const promoted=[];
+        ['ม.5','ม.4','ม.3','ม.2','ม.1'].forEach(lv=>{
+          const toLv=lvMap[lv];
+          prevStus.filter(s=>s.level===lv).forEach(s=>promoted.push({...s,level:toLv}));
+        });
+        // สร้าง ม.1 ใหม่
+        const rooms1=[...new Set(prevStus.filter(s=>s.level==='ม.1').map(s=>s.room))].sort((a,b)=>+a-+b);
+        let maxId=0;
+        Object.values(D._students).forEach(arr=>arr.forEach(s=>{const n=parseInt(s.id);if(!isNaN(n)&&n>maxId)maxId=n;}));
+        let seq2=maxId+1;
+        const newM1=[];
+        (rooms1.length?rooms1:[...Array(12)].map((_,i)=>String(i+1))).forEach(r=>{
+          const cnt=prevStus.filter(s=>s.level==='ม.1'&&s.room===r).length||30;
+          genRoomNames(cnt).forEach(name=>{newM1.push({id:String(seq2++).padStart(5,'0'),name,level:'ม.1',room:r});});
+        });
+        D._students[ny]=[...promoted,...newM1];
+        if(!D._classes)D._classes={};
+        D._classes[ny]=JSON.parse(JSON.stringify(D._classes[prevYear]||D.classes)).map(c=>({...c,teachers:[]}));
+        saveAll();CY=ny;CT='1';window.CY=CY;window.CT=CT;patchD();popAll();rSettings();rStu&&rStu(1);
+        alert('เลื่อนชั้นเรียบร้อย ✓\nปี '+ny+' ภาค 1\nนักเรียน ม.1 ใหม่ '+newM1.length+' คน\nเลื่อนชั้น '+promoted.length+' คน');
+        return;
+      }
+    }
+    saveAll();CY=ny;CT='1';window.CY=CY;window.CT=CT;rSettings();popAll();return;
+  }
   if(e.target.matches('.del-year')){const y=e.target.dataset.y;if(!confirm('ลบปีการศึกษา '+y+'?'))return;D.years=D.years.filter(x=>x!==y);delete D.grades[y];delete D.subjectMap[y];if(CY===y)CY=D.years[0]||'2568';saveAll();rSettings();popAll();return;}
   if(e.target.id==='btn-export-all'){exportJSON({D,CY,CT},'sgs-all-'+Date.now()+'.json');return;}
   if(e.target.id==='btn-export-year'){exportJSON({year:CY,D:{...D,grades:{[CY]:D.grades[CY]},subjectMap:{[CY]:D.subjectMap[CY]}}},'sgs-y'+CY+'.json');return;}
@@ -9214,6 +9526,437 @@ window.popAll=function(){
 // โหลดหน้าจอเริ่มต้นด้วยข้อมูลจาก localStorage ก่อน (ถ้ามี) แล้ว Firebase จะ replace ทันทีที่โหลดเสร็จ
 loadSaved(); // โหลด cache จาก localStorage ก่อนให้หน้าไม่ว่างเปล่า
 popAll();rSettings();initLogin();
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 🤖 AUTO-FILL GRADES — กรอกคะแนนอัตโนมัติครบทุกครู ทุกวิชา ทุกห้อง
+// ══════════════════════════════════════════════════════════════════════════════
+function autoFillAllGrades(){
+  const modal=document.getElementById('autofill-modal');
+  if(modal){
+    modal.style.display='flex';
+    document.getElementById('af-result').textContent='';
+    document.getElementById('af-progress').style.display='none';
+    document.getElementById('af-progress-bar').style.width='0%';
+    document.getElementById('btn-af-run').disabled=false;
+    document.getElementById('btn-af-run').style.display='';
+    const _btnSave=document.getElementById('btn-af-save');
+    if(_btnSave){_btnSave.style.display='none';}
+    // สร้างปุ่มเลือกแนะแนวแต่ละห้อง
+    const _guidRoomEl=document.getElementById('af-guid-room-overrides');
+    if(_guidRoomEl){
+      const _rooms=[...new Set(D.students.map(s=>s.level+'/'+s.room))].sort();
+      _guidRoomEl.innerHTML=_rooms.map(r=>`
+        <div style="display:inline-flex;align-items:center;gap:4px;background:#fff;border:1px solid #86efac;border-radius:8px;padding:4px 8px;font-size:11px">
+          <span style="font-weight:600;color:#1a2744">${r}</span>
+          <select class="af-guid-room-sel" data-room="${r}" style="font-size:11px;border:1px solid #ccc;border-radius:4px;padding:1px 4px">
+            <option value="">ค่าเริ่มต้น</option>
+            <option value="ผ">ผ ทั้งหมด</option>
+            <option value="มผ">มผ ทั้งหมด</option>
+            <option value="คละ">คละ</option>
+            <option value="ข้าม">ข้าม</option>
+          </select>
+        </div>`).join('');
+    }
+    // อัปเดตข้อความใน modal ให้สอดคล้องกับสิทธิ์ผู้ใช้
+    const infoBox=document.getElementById('af-info-box');
+    if(infoBox){
+      if(_isAdmin()){
+        infoBox.innerHTML='<strong>📋 ระบบจะกรอกคะแนนครบทุกครู ทุกวิชา ทุกห้อง</strong><br>🏆 ห้อง 1–5 = เด็กเก่ง &nbsp;|&nbsp; ห้อง 6–8 = ปานกลาง &nbsp;|&nbsp; ห้อง 9–12 = ต้องพัฒนา<br>⚡ กลางภาค &lt; ครึ่ง → แก้ตัวอัตโนมัติ (midRetake)<br>🗂 สร้างตารางคะแนนย่อย (pre/post/mid/final) ตามสัดส่วนอัตโนมัติ';
+      } else {
+        const me=_getMyUsername();
+        const mySjs=getVisibleSjs().filter(sj=>!sj.code||!sj.code.startsWith('ก'));
+        infoBox.innerHTML='<strong>📋 กรอกเฉพาะวิชาที่คุณสอน ('+mySjs.length+' วิชา)</strong><br>👤 ครู: <strong>'+me+'</strong><br>⚡ กลางภาค &lt; ครึ่ง → แก้ตัวอัตโนมัติ (midRetake)<br>🗂 สร้างตารางคะแนนย่อย (pre/post/mid/final) ตามสัดส่วนอัตโนมัติ';
+      }
+    }
+  }
+}
+
+function runAutoFill(){
+  const numCols=parseInt(document.getElementById('af-numcols').value)||2;
+  const skipFilled=document.getElementById('af-skip-filled').checked;
+  const section=document.getElementById('af-section').value||'all';
+  const progEl=document.getElementById('af-progress');
+  const progBar=document.getElementById('af-progress-bar');
+  const progLabel=document.getElementById('af-progress-label');
+  const resultEl=document.getElementById('af-result');
+  const btnRun=document.getElementById('btn-af-run');
+
+  btnRun.disabled=true;
+  progEl.style.display='block';
+  resultEl.textContent='';
+
+  // ── เกณฑ์คะแนนขั้นต่ำตามเลขห้อง ──────────────────────────────────────────
+  // pre/post: ห้อง1-4≥80%, ห้อง5-7≥70%, ห้อง8-12≥60%
+  // mid: อิสระ (0–100% ของ midMax)
+  // final: ห้อง1-4≥35%, ห้อง5-7≥25%, ห้อง8-12≥20%
+  function getRoomTier(roomStr){
+    const n=parseInt(roomStr)||99;
+    if(n<=4)return'A';
+    if(n<=7)return'B';
+    return'C';
+  }
+  function getPrePostMin(tier){return tier==='A'?0.80:tier==='B'?0.70:0.60;}
+  function getFinalMin(tier){return tier==='A'?0.35:tier==='B'?0.25:0.20;}
+
+  // สุ่มในช่วง [min, max] โดย min คือ minPct*max (ขั้นต่ำ) และ max คือ max เต็ม
+  // ทุกคนมีโอกาสได้คะแนนสูงได้ (ceiling = max เสมอ)
+  function rndScore(maxVal, minPct){
+    const lo=Math.round(maxVal*minPct*2)/2;
+    const hi=maxVal;
+    return Math.round((lo+Math.random()*(hi-lo))*2)/2;
+  }
+  // mid อิสระ: สุ่มทั้งช่วง 0–max
+  function rndFree(maxVal){return Math.round(Math.random()*maxVal*2)/2;}
+
+  // แอดมิน = ทุกวิชา, ครู = เฉพาะวิชาตัวเอง
+  const sjs=getVisibleSjs();
+  if(!sjs.length){
+    resultEl.textContent='❌ ไม่มีรายวิชาในภาคเรียนนี้';
+    btnRun.disabled=false;
+    return;
+  }
+
+  // ── cache cols ตามรหัสวิชา — วิชาเดียวกันทุกห้องใช้คอลัมน์เดียวกัน ──────
+  const codeColsCache={};
+  function getColsForCode(sjCode, W){
+    if(codeColsCache[sjCode]) return codeColsCache[sjCode];
+    function buildCols(existingCols, weightPct){
+      // ถ้า numCols > 1 ให้แยกคอลัมน์ตามที่ผู้ใช้สั่งเสมอ (ไม่ใช้ของเดิมที่อาจมีแค่ 1 ช่อง)
+      // ถ้า numCols == 1 และมีของเดิม ใช้ของเดิม; ไม่มีก็สร้างใหม่
+      if(numCols===1&&existingCols&&existingCols.length) return existingCols.map(c=>({n:c.n,m:c.m}));
+      const base=Math.floor(weightPct/numCols);
+      const rem=Math.round((weightPct-base*numCols)*10)/10;
+      return Array.from({length:numCols},(_,i)=>({
+        n:'งาน'+(i+1),
+        m:i===numCols-1?Math.round((base+rem)*10)/10||1:base||1
+      }));
+    }
+    const cached={
+      pre:W.pre||20, mid:W.mid||30, post:W.post||20, final:W.final||30,
+      midMax:W.midMax||W.mid, finalMax:W.finalMax||W.final,
+      preCols:buildCols(W.preCols,W.pre||20),
+      postCols:buildCols(W.postCols,W.post||20),
+      midCols:buildCols(W.midCols,W.mid||30),
+      finalCols:buildCols(W.finalCols,W.final||30),
+    };
+    codeColsCache[sjCode]=cached;
+    return cached;
+  }
+
+  // อ่านค่าตั้งแนะแนวจาก modal
+  const guidDefault=(document.querySelector('input[name="af-guid-default"]:checked')?.value)||'ผ';
+  const guidRoomMap={};
+  document.querySelectorAll('.af-guid-room-sel').forEach(sel=>{if(sel.value)guidRoomMap[sel.dataset.room]=sel.value;});
+  function getGuidVal(room,sid){
+    const v=guidRoomMap[room]||guidDefault;
+    if(v==='ข้าม')return null;
+    if(v==='คละ')return Math.random()<0.85?'ผ':'มผ';
+    return v;
+  }
+
+  let done=0,filled=0,skipped=0;
+
+  // กรอกวิชาแนะแนวก่อน (sync — ไม่ใช่ async tasks)
+  if(guidDefault!=='ข้าม'||Object.values(guidRoomMap).some(v=>v!=='ข้าม')){
+    sjs.forEach(sj=>{
+      if(!sj.code||!sj.code.startsWith('ก'))return;
+      const rooms=(sj.rooms&&sj.rooms.length)?sj.rooms:D.classes.map(c=>`${c.level}/${c.room}`);
+      rooms.forEach(room=>{
+        const roomKey=room;
+        const rv=guidRoomMap[roomKey]||guidDefault;
+        if(rv==='ข้าม')return;
+        const [lv,rm]=room.split('/');
+        const stus=D.students.filter(s=>s.level===lv&&s.room===rm);
+        stus.forEach(s=>{
+          const rec=mkRec(s.id,sj.id);
+          const skip=document.getElementById('af-skip-filled')?.checked;
+          if(skip&&rec.guidance&&rec.guidance!=='')return;
+          rec.guidance=getGuidVal(room,s.id);
+        });
+        filled++;
+      });
+    });
+  }
+
+  const tasks=[];
+  sjs.forEach(sj=>{
+    if(sj.code&&sj.code.startsWith('ก')) return;
+    const rooms=(sj.rooms&&sj.rooms.length)?sj.rooms:D.classes.map(c=>`${c.level}/${c.room}`);
+    rooms.forEach(r=>tasks.push({sj,room:r}));
+  });
+
+  const total=tasks.length;
+
+  function processNext(){
+    if(done>=total){
+      saveAll();
+      progBar.style.width='100%';
+      progLabel.textContent='เสร็จสิ้น!';
+      resultEl.textContent=`✅ กรอกครบแล้ว! ${filled} ห้อง/วิชา | ข้าม ${skipped} (มีคะแนนแล้ว)`;
+      btnRun.disabled=false;
+      btnRun.style.display='none';
+      const btnSave=document.getElementById('btn-af-save');
+      if(btnSave){btnSave.style.display='';btnSave.textContent='💾 บันทึกข้อมูล';btnSave.style.background='#1e7e34';}
+      if(typeof rGr==='function') rGr();
+      return;
+    }
+    const {sj,room}=tasks[done];
+    done++;
+    progBar.style.width=Math.round(done/total*100)+'%';
+    progLabel.textContent=`กำลังกรอก... [${sj.code}] ${sj.name} — ${room} (${done}/${total})`;
+
+    const [lv,rm]=room.split('/');
+    if(!lv||!rm){processNext();return;}
+    const stus=D.students.filter(s=>s.level===lv&&s.room===rm);
+    if(!stus.length){processNext();return;}
+
+    const W=getW(sj.id);
+    const WC=getColsForCode(sj.code||sj.id, W);
+
+    // คำนวณ tier ตามเลขห้อง
+    const tier=getRoomTier(rm);
+    const prePostMin=getPrePostMin(tier);
+    const finalMin=getFinalMin(tier);
+
+    if(skipFilled){
+      const anyFilled=stus.some(s=>{const rec=getRec(s.id,sj.id);return rec&&hasAnyScore(rec);});
+      if(anyFilled){skipped++;setTimeout(processNext,0);return;}
+    }
+
+    stus.forEach(s=>{
+      mkRec(s.id,sj.id);
+      const rec=D.grades[CY][CT][sj.id][s.id];
+
+      // ── PRE — ขั้นต่ำตาม tier, ceiling = max เต็ม ─────────────────────────
+      if(section==='all'||section==='pre'){
+        rec.preCols=WC.preCols;
+        WC.preCols.forEach((_,ci)=>{
+          rec.preScores[ci]=rndScore(WC.preCols[ci].m, prePostMin);
+        });
+        rec.preRO=false;
+      }
+
+      // ── MID — อิสระ (0–midMax) แบบ cols ────────────────────────────────────
+      if(section==='all'||section==='mid'){
+        if(WC.midCols&&WC.midCols.length>=1){
+          // แบบช่องย่อย (1 ช่องขึ้นไป)
+          rec.midCols=WC.midCols;
+          if(!rec.midScores)rec.midScores={};
+          const midColMax=WC.midCols.reduce((s,c)=>s+(c.m||0),0);
+          const half=midColMax/2;
+          let midTotal=0;
+          WC.midCols.forEach((_,ci)=>{
+            const v=rndFree(WC.midCols[ci].m);
+            rec.midScores[ci]=v;
+            midTotal+=v;
+          });
+          rec.mid=midColMax>0?midTotal/midColMax*(WC.mid||30):0;
+          rec.midMax=WC.mid||30;
+          rec.midRO=false;
+          if(midTotal<half){rec.midRetake=true;rec._midOrig=midTotal;}
+          else{rec.midRetake=false;rec._midOrig=null;}
+        } else {
+          // fallback แบบช่องเดียว
+          const midMax=WC.midMax;
+          const midVal=rndFree(midMax);
+          rec.mid=midVal;
+          rec.midMax=midMax;
+          rec.midRO=false;
+          if(midVal<midMax/2){rec.midRetake=true;rec._midOrig=midVal;}
+          else{rec.midRetake=false;rec._midOrig=null;}
+        }
+      }
+
+      // ── POST — ขั้นต่ำตาม tier, ceiling = max เต็ม ────────────────────────
+      if(section==='all'||section==='post'){
+        rec.postCols=WC.postCols;
+        WC.postCols.forEach((_,ci)=>{
+          rec.postScores[ci]=rndScore(WC.postCols[ci].m, prePostMin);
+        });
+        rec.postRO=false;
+      }
+
+      // ── FINAL — ขั้นต่ำตาม tier แบบ cols ────────────────────────────────
+      if(section==='all'||section==='final'){
+        if(WC.finalCols&&WC.finalCols.length>=1){
+          // แบบช่องย่อย (1 ช่องขึ้นไป)
+          rec.finalCols=WC.finalCols;
+          if(!rec.finalScores)rec.finalScores={};
+          const finalColMax=WC.finalCols.reduce((s,c)=>s+(c.m||0),0);
+          WC.finalCols.forEach((_,ci)=>{
+            rec.finalScores[ci]=rndScore(WC.finalCols[ci].m, finalMin);
+          });
+          const tot=WC.finalCols.reduce((s,_,ci)=>s+(rec.finalScores[ci]||0),0);
+          rec.final=finalColMax>0?tot/finalColMax*(WC.final||30):0;
+          rec.finalRO=false;
+        } else {
+          // fallback แบบช่องเดียว
+          const finalMax=WC.finalMax;
+          rec.final=rndScore(finalMax, finalMin);
+          rec.finalRO=false;
+        }
+      }
+    });
+
+    filled++;
+    setTimeout(processNext,0);
+  }
+
+  processNext();
+}
+// ── END AUTO-FILL ──────────────────────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 🗑 CLEAR SCORES — ลบคะแนนที่กรอกแล้ว
+// ══════════════════════════════════════════════════════════════════════════════
+function openClearModal(){
+  const modal=document.getElementById('clear-modal');
+  if(!modal)return;
+  modal.style.display='flex';
+  document.getElementById('cr-result').textContent='';
+  document.getElementById('cr-confirm-box').style.display='none';
+
+  // reset radio
+  document.getElementById('cr-mode-all').checked=true;
+  document.getElementById('cr-sj-panel').style.display='none';
+  document.getElementById('cr-room-panel').style.display='none';
+
+  // highlight border ของ radio ที่เลือก
+  function updateRadioBorder(){
+    ['all','sj','room'].forEach(m=>{
+      const lbl=document.getElementById('cr-mode-'+m+'-lbl');
+      if(lbl)lbl.style.borderColor=document.getElementById('cr-mode-'+m).checked?'#c0392b':'#eee';
+    });
+  }
+  document.querySelectorAll('input[name="cr-mode"]').forEach(r=>{
+    r.onchange=()=>{
+      updateRadioBorder();
+      document.getElementById('cr-sj-panel').style.display=r.value==='subject'?'block':'none';
+      document.getElementById('cr-room-panel').style.display=r.value==='room'?'block':'none';
+    };
+  });
+  updateRadioBorder();
+
+  // สร้างรายการวิชา
+  const sjs=getVisibleSjs().filter(sj=>!sj.code||!sj.code.startsWith('ก'));
+  const sjList=document.getElementById('cr-sj-list');
+  sjList.innerHTML=sjs.length?sjs.map(sj=>`
+    <label style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;font-size:12px;hover:background:#f5f5f5">
+      <input type="checkbox" class="cr-sj-chk" data-sjid="${sj.id}" checked style="accent-color:#c0392b"/>
+      <span style="font-weight:600;color:#555">[${sj.code}]</span> ${sj.name}
+      <span style="margin-left:auto;font-size:11px;color:#aaa">${sj.teacher||''}</span>
+    </label>`).join(''):'<div style="color:#aaa;font-size:12px;padding:4px">ไม่มีวิชา</div>';
+
+  // สร้างรายการห้อง
+  const allRooms=[...new Set(
+    sjs.flatMap(sj=>(sj.rooms&&sj.rooms.length)?sj.rooms:D.classes.map(c=>`${c.level}/${c.room}`))
+  )].sort((a,b)=>{
+    const [la,ra]=a.split('/');const [lb,rb]=b.split('/');
+    return la.localeCompare(lb)||parseInt(ra)-parseInt(rb);
+  });
+  const roomList=document.getElementById('cr-room-list');
+  roomList.innerHTML=allRooms.map(r=>`
+    <label style="cursor:pointer;display:flex;align-items:center;gap:5px;padding:4px 9px;border:1px solid #dde;border-radius:6px;font-size:12px;background:#f8f9fa">
+      <input type="checkbox" class="cr-room-chk" data-room="${r}" checked style="accent-color:#c0392b"/> ${r}
+    </label>`).join('');
+}
+
+function crSelectAll(val){
+  document.querySelectorAll('.cr-sj-chk').forEach(c=>c.checked=val);
+}
+function crSelectAllRooms(val){
+  document.querySelectorAll('.cr-room-chk').forEach(c=>c.checked=val);
+}
+
+function askClearConfirm(){
+  const mode=document.querySelector('input[name="cr-mode"]:checked')?.value||'all';
+  const section=document.getElementById('cr-section').value;
+  const sectionLabel={all:'ทุกส่วน',pre:'ก่อนกลางภาค',mid:'กลางภาค',post:'หลังกลางภาค',final:'ปลายภาค'}[section];
+
+  let desc='';
+  if(mode==='all'){
+    const sjs=getVisibleSjs().filter(sj=>!sj.code||!sj.code.startsWith('ก'));
+    desc=`ลบคะแนน<strong>${sectionLabel}</strong>ทุกวิชา (${sjs.length} วิชา) ทุกห้อง`;
+  } else if(mode==='subject'){
+    const checked=[...document.querySelectorAll('.cr-sj-chk:checked')];
+    if(!checked.length){document.getElementById('cr-result').textContent='❌ กรุณาเลือกวิชาอย่างน้อย 1 วิชา';return;}
+    desc=`ลบคะแนน<strong>${sectionLabel}</strong> จำนวน <strong>${checked.length} วิชา</strong> ทุกห้องที่สอน`;
+  } else {
+    const checked=[...document.querySelectorAll('.cr-room-chk:checked')];
+    if(!checked.length){document.getElementById('cr-result').textContent='❌ กรุณาเลือกห้องอย่างน้อย 1 ห้อง';return;}
+    desc=`ลบคะแนน<strong>${sectionLabel}</strong> ทุกวิชา ใน <strong>${checked.length} ห้อง</strong>`;
+  }
+
+  document.getElementById('cr-confirm-desc').innerHTML=desc;
+  document.getElementById('cr-confirm-box').style.display='block';
+  document.getElementById('cr-result').textContent='';
+}
+
+function _clearRec(rec, section){
+  if(!rec)return;
+  if(section==='all'||section==='pre'){
+    rec.preScores={};rec.preRO=false;
+  }
+  if(section==='all'||section==='mid'){
+    rec.mid=null;rec.midRO=false;rec.midRetake=false;rec._midOrig=null;rec.midScores={};
+  }
+  if(section==='all'||section==='post'){
+    rec.postScores={};rec.postRO=false;
+  }
+  if(section==='all'||section==='final'){
+    rec.final=null;rec.finalRO=false;rec.finalScores={};
+  }
+}
+
+function runClearScores(){
+  const mode=document.querySelector('input[name="cr-mode"]:checked')?.value||'all';
+  const section=document.getElementById('cr-section').value;
+  document.getElementById('cr-confirm-box').style.display='none';
+
+  let cleared=0;
+  const allSjs=getVisibleSjs().filter(sj=>!sj.code||!sj.code.startsWith('ก'));
+
+  if(mode==='all'){
+    allSjs.forEach(sj=>{
+      const rooms=(sj.rooms&&sj.rooms.length)?sj.rooms:D.classes.map(c=>`${c.level}/${c.room}`);
+      rooms.forEach(r=>{
+        const [lv,rm]=r.split('/');
+        D.students.filter(s=>s.level===lv&&s.room===rm).forEach(s=>{
+          _clearRec(getRec(s.id,sj.id),section);cleared++;
+        });
+      });
+    });
+  } else if(mode==='subject'){
+    const sjIds=[...document.querySelectorAll('.cr-sj-chk:checked')].map(c=>c.dataset.sjid);
+    allSjs.filter(sj=>sjIds.includes(sj.id)).forEach(sj=>{
+      const rooms=(sj.rooms&&sj.rooms.length)?sj.rooms:D.classes.map(c=>`${c.level}/${c.room}`);
+      rooms.forEach(r=>{
+        const [lv,rm]=r.split('/');
+        D.students.filter(s=>s.level===lv&&s.room===rm).forEach(s=>{
+          _clearRec(getRec(s.id,sj.id),section);cleared++;
+        });
+      });
+    });
+  } else {
+    // mode=room
+    const rooms=[...document.querySelectorAll('.cr-room-chk:checked')].map(c=>c.dataset.room);
+    allSjs.forEach(sj=>{
+      const sjRooms=(sj.rooms&&sj.rooms.length)?sj.rooms:D.classes.map(c=>`${c.level}/${c.room}`);
+      rooms.filter(r=>sjRooms.includes(r)).forEach(r=>{
+        const [lv,rm]=r.split('/');
+        D.students.filter(s=>s.level===lv&&s.room===rm).forEach(s=>{
+          _clearRec(getRec(s.id,sj.id),section);cleared++;
+        });
+      });
+    });
+  }
+
+  saveAll();
+  document.getElementById('cr-result').style.color='#1e7e34';
+  document.getElementById('cr-result').textContent=`✅ ลบคะแนนเรียบร้อย ${cleared} รายการ`;
+  if(typeof rGr==='function')rGr();
+}
+// ── END CLEAR SCORES ───────────────────────────────────────────────────────────
 </script>
 </body>
 </html>
